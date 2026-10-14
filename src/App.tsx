@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, LayoutDashboard, Plus, Settings2, Sparkles, X } from 'lucide-react'
+import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, LayoutDashboard, Settings2, Sparkles, X } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
 import { Button, Modal, SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
@@ -169,7 +169,7 @@ export default function App() {
       </aside>
 
       <main className="main-area">
-        <header className="topbar"><div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div><div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} />{activePage === 'tasks' && <Button variant="primary" icon={<Plus size={16} />} onClick={() => openNewTask()}>新建任务</Button>}</div></header>
+        <header className="topbar"><div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div><div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div></header>
         {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setBackupOpen(true)}>打开备份</button></div>}
         <div className={`page-content page-${activePage}`}>
           {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={(task) => { setActiveTaskId(task.id); setNewTaskStatus(task.status); setDrawerOpen(true) }} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onOpenHistory={() => setHistoryOpen(true)} />}
