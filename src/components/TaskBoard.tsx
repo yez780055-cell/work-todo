@@ -80,7 +80,8 @@ function TaskCard({ task, now, onClick, onDragStart, onDragEnd }: {
   onDragStart: () => void
   onDragEnd: () => void
 }) {
-  const countdown = formatCountdown(task.dueDate, task.dueTime, now)
+  const isCompleted = task.status === 'done'
+  const countdown = isCompleted ? '' : formatCountdown(task.dueDate, task.dueTime, now)
   const overdue = countdown.startsWith('逾期')
   const completedSubtasks = task.subtasks.filter((item) => item.done).length
   return (
@@ -98,10 +99,10 @@ function TaskCard({ task, now, onClick, onDragStart, onDragEnd }: {
       </span>
       <strong className="task-card-title">{task.title || '未命名任务'}</strong>
       {task.note && <span className="task-card-note">{task.note}</span>}
-      <span className="task-card-meta">
+      {!isCompleted && (task.dueDate || countdown) && <span className="task-card-meta">
         {task.dueDate && <span className={`due-pill ${overdue ? 'due-overdue' : ''}`}><CalendarClock size={13} />{formatDateLabel(task.dueDate, now)}{task.dueTime ? ` ${task.dueTime}` : ''}</span>}
         {countdown && <span className={`countdown ${overdue ? 'countdown-overdue' : ''}`}><Clock3 size={12} />{countdown}</span>}
-      </span>
+      </span>}
       {task.subtasks.length > 0 && <span className="task-card-subtasks"><span className="tiny-progress"><i style={{ width: `${(completedSubtasks / task.subtasks.length) * 100}%` }} /></span>{completedSubtasks}/{task.subtasks.length} 子任务</span>}
       <span className="task-card-drag-hint"><ArrowUp size={12} /><ArrowDown size={12} /> 拖动调整状态</span>
     </button>
