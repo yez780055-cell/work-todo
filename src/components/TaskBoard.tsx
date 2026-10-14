@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, CalendarClock, Check, Clock3, History, Plus, Star } from 'lucide-react'
+import { CalendarClock, Check, Clock3, History, Plus, Star } from 'lucide-react'
 import { formatCountdown, formatDateLabel, isInCurrentWeek } from '../lib/dates'
 import { STATUS_LABELS, STATUS_ORDER, type Task, type TaskStatus } from '../lib/model'
 import { Button, EmptyState } from './common'
 
 export function TaskBoard({
-  tasks, now, onOpenTask, onCreateTask, onMoveTask, onOpenHistory,
+  tasks, now, onOpenTask, onCreateTask, onMoveTask, onToggleSubtask, onOpenHistory,
 }: {
   tasks: Task[]
   now: Date
   onOpenTask: (task: Task) => void
   onCreateTask: (status: TaskStatus) => void
   onMoveTask: (id: string, status: TaskStatus) => void
+  onToggleSubtask: (taskId: string, subtaskId: string, done: boolean) => void
   onOpenHistory: () => void
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -61,6 +62,7 @@ export function TaskBoard({
                   task={task}
                   now={now}
                   onClick={() => onOpenTask(task)}
+                  onToggleSubtask={onToggleSubtask}
                   onDragStart={() => setDraggingId(task.id)}
                   onDragEnd={() => setDraggingId(null)}
                 />
@@ -73,39 +75,80 @@ export function TaskBoard({
   )
 }
 
-function TaskCard({ task, now, onClick, onDragStart, onDragEnd }: {
+function TaskCard({ task, now, onClick, onToggleSubtask, onDragStart, onDragEnd }: {
   task: Task
   now: Date
   onClick: () => void
+  onToggleSubtask: (taskId: string, subtaskId: string, done: boolean) => void
   onDragStart: () => void
   onDragEnd: () => void
 }) {
+  const [subtasksExpanded, setSubtasksExpanded] = useState(false)
   const isCompleted = task.status === 'done'
   const countdown = isCompleted ? '' : formatCountdown(task.dueDate, task.dueTime, now)
   const overdue = countdown.startsWith('逾期')
   const completedSubtasks = task.subtasks.filter((item) => item.done).length
+  const subtaskListId = `task-subtasks-${task.id}`
   return (
-    <button
-      type="button"
+    <article
       className={`task-card ${task.status === 'done' ? 'task-card-done' : ''}`}
       draggable
-      onDragStart={(event) => { event.dataTransfer.setData('text/plain', task.id); event.dataTransfer.effectAllowed = 'move'; onDragStart() }}
+      onDragStart={(event) => {
+        if (event.target instanceof Element && event.target.closest('[data-task-card-control]')) {
+          event.preventDefault()
+          return
+        }
+        event.dataTransfer.setData('text/plain', task.id)
+        event.dataTransfer.effectAllowed = 'move'
+        onDragStart()
+      }}
       onDragEnd={onDragEnd}
       onClick={onClick}
     >
-      <span className="task-card-top">
-        <span className="task-card-category">{task.status === 'done' ? <><Check size={13} /> 已完成</> : '工作任务'}</span>
-        {task.important && <Star className="important-star" size={15} fill="currentColor" />}
-      </span>
-      <strong className="task-card-title">{task.title || '未命名任务'}</strong>
-      {task.note && <span className="task-card-note">{task.note}</span>}
-      {!isCompleted && (task.dueDate || countdown) && <span className="task-card-meta">
-        {task.dueDate && <span className={`due-pill ${overdue ? 'due-overdue' : ''}`}><CalendarClock size={13} />{formatDateLabel(task.dueDate, now)}{task.dueTime ? ` ${task.dueTime}` : ''}</span>}
-        {countdown && <span className={`countdown ${overdue ? 'countdown-overdue' : ''}`}><Clock3 size={12} />{countdown}</span>}
-      </span>}
-      {task.subtasks.length > 0 && <span className="task-card-subtasks"><span className="tiny-progress"><i style={{ width: `${(completedSubtasks / task.subtasks.length) * 100}%` }} /></span>{completedSubtasks}/{task.subtasks.length} 子任务</span>}
-      <span className="task-card-drag-hint"><ArrowUp size={12} /><ArrowDown size={12} /> 拖动调整状态</span>
-    </button>
+      <button type="button" className="task-card-main" aria-label={`打开任务详情：${task.title || '未命名任务'}`}>
+        <span className="task-card-top">
+          <span className="task-card-category">{task.status === 'done' ? <><Check size={13} /> 已完成</> : '工作任务'}</span>
+          {task.important && <Star className="important-star" size={15} fill="currentColor" />}
+        </span>
+        <strong className="task-card-title">{task.title || '未命名任务'}</strong>
+        {task.note && <span className="task-card-note">{task.note}</span>}
+        {!isCompleted && (task.dueDate || countdown) && <span className="task-card-meta">
+          {task.dueDate && <span className={`due-pill ${overdue ? 'due-overdue' : ''}`}><CalendarClock size={13} />{formatDateLabel(task.dueDate, now)}{task.dueTime ? ` ${task.dueTime}` : ''}</span>}
+          {countdown && <span className={`countdown ${overdue ? 'countdown-overdue' : ''}`}><Clock3 size={12} />{countdown}</span>}
+        </span>}
+      </button>
+      {task.subtasks.length > 0 && <>
+        <button
+          type="button"
+          className="task-card-subtasks"
+          data-task-card-control
+          aria-expanded={subtasksExpanded}
+          aria-controls={subtaskListId}
+          aria-label={`${task.title || '未命名任务'}：子任务 ${completedSubtasks}/${task.subtasks.length}，${subtasksExpanded ? '收起' : '展开'}`}
+          onClick={(event) => { event.stopPropagation(); setSubtasksExpanded((expanded) => !expanded) }}
+        >
+          <span className="tiny-progress" aria-hidden="true"><i style={{ width: `${(completedSubtasks / task.subtasks.length) * 100}%` }} /></span>
+          <span>{completedSubtasks}/{task.subtasks.length} 子任务</span>
+        </button>
+        {subtasksExpanded && <ul className="task-card-subtask-list" id={subtaskListId} data-task-card-control onClick={(event) => event.stopPropagation()}>
+          {task.subtasks.map((subtask) => (
+            <li key={subtask.id}>
+              <label className={`task-card-subtask-row ${subtask.done ? 'is-complete' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={subtask.done}
+                  disabled={isCompleted}
+                  aria-label={`子任务：${subtask.title || '未命名子任务'}`}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => { event.stopPropagation(); onToggleSubtask(task.id, subtask.id, event.currentTarget.checked) }}
+                />
+                <span>{subtask.title || '未命名子任务'}</span>
+              </label>
+            </li>
+          ))}
+        </ul>}
+      </>}
+    </article>
   )
 }
 

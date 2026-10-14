@@ -125,6 +125,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .task-card { position: relative; width: 100%; display: block; padding: 13px 12px 12px; border: 1px solid #e9ebef; border-radius: 11px; color: var(--ink); background: #fff; box-shadow: 0 2px 5px rgba(33, 43, 64, .025); text-align: left; cursor: grab; transition: box-shadow .16s ease, transform .16s ease, border-color .16s ease; }
 .task-card:hover { transform: translateY(-2px); border-color: #dce2f4; box-shadow: 0 8px 20px rgba(39, 54, 98, .08); }
 .task-card:active { cursor: grabbing; }
+.task-card-main { width: 100%; display: block; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.task-card-main:focus-visible, .task-card-subtasks:focus-visible { outline: 2px solid #4a66ca; outline-offset: 3px; border-radius: 6px; }
 .task-card-top { display: flex; align-items: center; justify-content: space-between; color: #606c7b; font-size: 12px; }
 .task-card-category { display: inline-flex; align-items: center; gap: 4px; }
 .important-star { color: #dda94d; }
@@ -134,11 +136,16 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .due-pill, .countdown { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 6px; border-radius: 6px; color: #566b92; background: #f4f5f8; font-size: 12px; }
 .countdown { color: #7385bd; background: #f1f3fc; }
 .due-overdue, .countdown-overdue { color: #c25d65; background: #fff0f0; }
-.task-card-subtasks { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: #606c7b; font-size: 12px; }
+.task-card-subtasks { max-width: 100%; display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 0; border: 0; color: #606c7b; background: transparent; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .tiny-progress { width: 31px; height: 4px; overflow: hidden; border-radius: 5px; background: #eceef2; }
 .tiny-progress i { display: block; height: 100%; border-radius: inherit; background: #79b79d; }
-.task-card-drag-hint { display: flex; align-items: center; gap: 2px; margin-top: 10px; color: #606c7b; font-size: 11px; opacity: 0; transition: opacity .15s ease; }
-.task-card:hover .task-card-drag-hint { opacity: 1; }
+.task-card-subtask-list { display: grid; gap: 6px; margin: 9px 0 0; padding: 9px 0 0; border-top: 1px solid #eef0f4; list-style: none; }
+.task-card-subtask-list li { min-width: 0; }
+.task-card-subtask-row { display: flex; align-items: flex-start; gap: 7px; color: #606c7b; font-size: 12px; line-height: 1.45; cursor: pointer; }
+.task-card-subtask-row input { width: 14px; height: 14px; flex: 0 0 14px; margin: 1px 0 0; accent-color: #5877d9; cursor: pointer; }
+.task-card-subtask-row input:disabled { cursor: not-allowed; }
+.task-card-subtask-row span { min-width: 0; overflow-wrap: anywhere; }
+.task-card-subtask-row.is-complete span { color: #7d8794; text-decoration: line-through; text-decoration-color: #aab2bd; }
 .task-card-done { opacity: .79; }
 .task-card-done .task-card-title { color: #6d7580; text-decoration: line-through; text-decoration-color: #aab2bd; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: flex; justify-content: center; align-items: center; padding: 24px; background: rgba(31, 37, 50, .28); backdrop-filter: blur(3px); animation: fade-in .15s ease-out; }
@@ -277,9 +284,13 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .month-picker { width: 34px; height: 30px; margin-left: 2px; opacity: .01; }
 .calendar-month-nav { position: relative; }
 .month-picker { position: absolute; left: 103px; top: 0; width: 37px; cursor: pointer; }
-.calendar-counts { display: flex; gap: 13px; color: #606c7b; font-size: 12px; }
-.calendar-counts span:nth-child(2) svg { color: #67a987; }
-.calendar-counts span:nth-child(3) svg { color: #d1a04e; }
+.calendar-counts { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; column-gap: 16px; row-gap: 7px; color: #606c7b; font-size: 12px; }
+.calendar-count-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; line-height: 1.2; }
+.calendar-count-icon { display: block; flex: 0 0 auto; color: #606c7b; }
+.calendar-count-rest .calendar-count-icon { color: #67a987; }
+.calendar-count-holiday .calendar-count-icon { color: #b38128; }
+.calendar-count-value { font-variant-numeric: tabular-nums; font-weight: 600; line-height: inherit; }
+.calendar-count-label { line-height: inherit; }
 .calendar-bulk-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #eef0f4; background: #f8f9fc; }
 .calendar-bulk-toolbar > div:first-child { display: flex; align-items: center; gap: 7px; color: #677080; font-size: 12px; }
 .calendar-bulk-toolbar small { margin-left: 3px; color: #606c7b; font-size: 11px; }
@@ -408,7 +419,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .routine-row-title { font-size: 13px; }
   .routine-row-rule { display: none; }
   .calendar-header { align-items: flex-start; flex-direction: column; padding: 13px; }
-  .calendar-counts { flex-wrap: wrap; }
+  .calendar-counts { justify-content: flex-start; }
   .calendar-bulk-toolbar { align-items: flex-start; flex-direction: column; padding: 10px 12px; }
   .bulk-actions { flex-wrap: wrap; }
   .calendar-days { padding: 0 5px 9px; }

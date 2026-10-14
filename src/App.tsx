@@ -10,7 +10,7 @@ import { isInCurrentWeek, toDateKey } from './lib/dates'
 import { createEmptyWorkspace, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
 import { parseWorkspaceBackup } from './lib/storage'
 import { sanitizeRichText } from './lib/richText'
-import { setTaskStatus } from './lib/tasks'
+import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
 import { useWorkspace } from './useWorkspace'
 
 type PageKey = 'tasks' | 'routines' | 'calendar' | 'index'
@@ -63,6 +63,10 @@ export default function App() {
 
   const updateTaskStatus = (taskId: string, status: TaskStatus) => {
     setData((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === taskId ? setTaskStatus(task, status) : task) }))
+  }
+
+  const toggleSubtask = (taskId: string, subtaskId: string, done: boolean) => {
+    setData((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === taskId ? setSubtaskCompletion(task, subtaskId, done) : task) }))
   }
 
   const openNewTask = (status: TaskStatus = 'todo') => {
@@ -172,7 +176,7 @@ export default function App() {
         <header className="topbar"><div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div><div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div></header>
         {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setBackupOpen(true)}>打开备份</button></div>}
         <div className={`page-content page-${activePage}`}>
-          {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={(task) => { setActiveTaskId(task.id); setNewTaskStatus(task.status); setDrawerOpen(true) }} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onOpenHistory={() => setHistoryOpen(true)} />}
+          {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={(task) => { setActiveTaskId(task.id); setNewTaskStatus(task.status); setDrawerOpen(true) }} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} />}
           {activePage === 'routines' && <RoutinePage rules={data.routineRules} completions={data.routineCompletions} dateKey={localDateKey} calendarOverrides={data.calendarOverrides} onToggleCompletion={toggleRoutine} onSaveRule={saveRoutineRule} onDeleteRule={deleteRoutineRule} onToggleRule={toggleRoutineRule} />}
           {activePage === 'calendar' && <CalendarPage overrides={data.calendarOverrides} onSetDays={setCalendarDays} />}
           {activePage === 'index' && <IndexPage html={data.indexDocument.html} saveState={saveState} onChange={updateIndex} resetVersion={resetVersion} />}
