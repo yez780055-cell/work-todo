@@ -66,7 +66,6 @@ export function TaskBoard({
                 />
               ))}
             </div>
-            {status !== 'done' && <button className="add-task-inline" onClick={() => onCreateTask(status)}><Plus size={15} /> 新建任务</button>}
           </section>
         ))}
       </div>
