@@ -106,10 +106,11 @@ export function getCalendarMonthGrid(year: number, month: number): string[] {
   const offset = (first.getDay() + 6) % 7
   const start = new Date(year, month, 1 - offset)
   const cellCount = 42
-  return Array.from({ length: cellCount }, (_, index) => {
-    const date = new Date(start)
-    date.setDate(start.getDate() + index)
-    return toDateKey(date)
+  const date = new Date(start)
+  return Array.from({ length: cellCount }, () => {
+    const dateKey = toDateKey(date)
+    date.setDate(date.getDate() + 1)
+    return dateKey
   })
 }
 

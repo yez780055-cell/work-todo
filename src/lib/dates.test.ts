@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getCalendarMonthGrid, getLocalWeekRange, isInCurrentWeek, routineRunsOnDate, toDateKey } from './dates'
+import { dateFromKey, getCalendarMonthGrid, getLocalWeekRange, isInCurrentWeek, routineRunsOnDate, toDateKey } from './dates'
 import type { RoutineRule } from './model'
 
 const rule = (overrides: Partial<RoutineRule> = {}): RoutineRule => ({
@@ -35,5 +35,12 @@ describe('local date behavior', () => {
     expect(grid).toHaveLength(42)
     expect(grid[0]).toBe('2026-09-28')
     expect(grid[7]).toBe('2026-10-05')
+    expect(grid[41]).toBe('2026-11-08')
+    for (let index = 1; index < grid.length; index += 1) {
+      const nextDate = dateFromKey(grid[index - 1])
+      nextDate.setDate(nextDate.getDate() + 1)
+      expect(grid[index]).toBe(toDateKey(nextDate))
+    }
+    expect(getCalendarMonthGrid(2024, 1)).toContain('2024-02-29')
   })
 })
