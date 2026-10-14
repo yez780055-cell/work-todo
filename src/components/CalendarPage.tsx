@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, BriefcaseBusiness, CalendarDays, Circle, RotateCcw, Sun, Umbrella } from 'lucide-react'
 import { dateFromKey, getCalendarMonthGrid, getCalendarDayType, getMonthLabel, isSameMonth, toDateKey } from '../lib/dates'
 import { WEEKDAY_LABELS, type CalendarDayType } from '../lib/model'
-import { EmptyState } from './common'
 
 const TYPE_LABELS: Record<CalendarDayType, string> = { workday: '工作日', rest: '休息日', holiday: '节假日' }
 
@@ -58,7 +57,6 @@ export function CalendarPage({ overrides, onSetDays }: {
 
   return (
     <div className="calendar-page">
-      <div className="calendar-intro"><div><span className="eyebrow">YOUR WORK RHYTHM</span><h2>日历由你来定。</h2><p>默认每一天都是工作日。选中一个或多个日期后，批量标记排班。</p></div><div className="calendar-legend"><span><i className="legend-dot legend-work" />工作日</span><span><i className="legend-dot legend-rest" />休息日</span><span><i className="legend-dot legend-holiday" />节假日</span></div></div>
       <section className="calendar-panel">
         <header className="calendar-header">
           <div className="calendar-month-nav"><button className="icon-button" onClick={() => moveMonth(-1)} aria-label="上个月"><ArrowLeft size={17} /></button><h3>{getMonthLabel(year, month)}</h3><button className="icon-button" onClick={() => moveMonth(1)} aria-label="下个月"><ArrowRight size={17} /></button><input className="month-picker" type="month" value={`${year}-${String(month + 1).padStart(2, '0')}`} onChange={(event) => { if (!event.target.value) return; const [y, m] = event.target.value.split('-').map(Number); setYear(y); setMonth(m - 1); setSelected([]); setAnchor(null) }} aria-label="选择月份" /></div>
@@ -89,7 +87,6 @@ export function CalendarPage({ overrides, onSetDays }: {
         </div>
         <footer className="calendar-footer"><span><CalendarDays size={15} />本月已设置 {monthOverrides.length} 天</span><span>点击日期选择；按住 Shift 或 Ctrl / ⌘ 可批量选择</span></footer>
       </section>
-      {selected.length === 0 && monthOverrides.length === 0 && <div className="calendar-hint"><EmptyState icon={<CalendarDays size={20} />} title="还没有自定义排班" detail="周六周日同样默认为工作日。选择日期后设置你的真实班次。" /></div>}
     </div>
   )
 }
