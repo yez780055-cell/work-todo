@@ -85,11 +85,6 @@ export function IndexPage({ html, saveState, onChange, resetVersion }: {
 
   return (
     <div className="index-page">
-      <div className="index-cover">
-        <div className="index-cover-top"><span className="eyebrow">YOUR WORKING MEMORY</span><span className="index-cover-mark">INDEX / 01</span></div>
-        <h2>把重要的经验留下来。</h2>
-        <p>工作要点、判断依据、偶然想到的好办法，都可以先放在这里。</p>
-      </div>
       <section className="index-document-card">
         <header className="index-document-header"><div><span className="document-type">主文档</span><h3>工作 Index</h3></div><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></header>
         <div className="index-actions"><div className="editor-toolbar" aria-label="文字格式">
