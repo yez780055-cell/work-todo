@@ -98,8 +98,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .board-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .board-summary { display: flex; gap: 10px; align-items: center; color: #9198a4; font-size: 11px; }
 .board-summary i { width: 3px; height: 3px; border-radius: 50%; background: #c4c8cf; }
-.task-board { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); align-items: start; gap: 15px; overflow-x: auto; padding: 0 0 18px; }
-.task-column { min-width: 240px; min-height: 440px; padding: 13px 12px 12px; border: 1px solid #e8eaee; border-radius: 14px; background: #f0f2f5; transition: background .15s ease, border-color .15s ease; }
+.task-board { display: grid; grid-template-columns: repeat(4, minmax(190px, 1fr)); align-items: start; gap: 15px; overflow-x: auto; padding: 0 0 18px; }
+.task-column { min-width: 0; min-height: 440px; padding: 13px 12px 12px; border: 1px solid #e8eaee; border-radius: 14px; background: #f0f2f5; transition: background .15s ease, border-color .15s ease; }
 .task-column.drop-ready { border-color: #d7dff7; }
 .task-column:hover { background: #eff1f5; }
 .column-header { display: flex; align-items: center; justify-content: space-between; padding: 0 1px 12px; }
@@ -387,7 +387,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .sidebar { width: 226px; flex-basis: 226px; }
   .page-content { padding-right: 24px; padding-left: 24px; }
   .topbar { padding-right: 24px; padding-left: 24px; }
-  .task-board { grid-template-columns: repeat(4, minmax(225px, 1fr)); }
+  .task-board { grid-template-columns: repeat(4, minmax(175px, 1fr)); }
 }
 
 @media (max-width: 790px) {
@@ -408,7 +408,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .topbar .button { min-height: 32px; padding: 0 9px; font-size: 10px; }
   .page-content { padding: 19px 14px 36px; }
   .task-board { grid-template-columns: repeat(4, minmax(220px, 82vw)); gap: 10px; }
-  .task-column { min-height: 55vh; }
+  .task-column { min-width: 220px; min-height: 55vh; }
   .routine-intro, .calendar-intro { align-items: flex-start; flex-direction: column; gap: 13px; margin: 4px 0 18px; }
   .routine-intro h2, .calendar-intro h2 { font-size: 19px; }
   .routine-panel-header { align-items: flex-start; flex-direction: column; padding: 16px; }
