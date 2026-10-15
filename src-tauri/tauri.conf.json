@@ -14,6 +14,7 @@
       {
         "label": "main",
         "title": "Work Todo · 工作待办",
+        "dragDropEnabled": false,
         "width": 1280,
         "height": 820,
         "minWidth": 960,

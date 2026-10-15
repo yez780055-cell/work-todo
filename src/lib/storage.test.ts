@@ -2,6 +2,7 @@ import { indexedDB } from 'fake-indexeddb'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmptyWorkspace, createTask } from './model'
 import { loadWorkspace, parseWorkspaceBackup, saveWorkspace } from './storage'
+import { setTaskStatus } from './tasks'
 
 beforeEach(async () => {
   Object.defineProperty(window, 'indexedDB', { configurable: true, value: indexedDB })
@@ -14,6 +15,20 @@ beforeEach(async () => {
 })
 
 describe('workspace storage and backup compatibility', () => {
+  it('restores moved task status and completion metadata from a reopened IndexedDB connection', async () => {
+    const workspace = createEmptyWorkspace()
+    const task = createTask('桌面拖动后重启', 'review')
+    task.subtasks = [{ id: 's1', title: '保留步骤', done: false }]
+    const completed = setTaskStatus(task, 'done', '2026-10-15T01:00:00.000Z')
+    workspace.tasks.push(completed)
+    await saveWorkspace(workspace)
+    expect((await loadWorkspace()).tasks[0]).toEqual(completed)
+
+    const reopened = setTaskStatus(completed, 'doing', '2026-10-15T02:00:00.000Z')
+    await saveWorkspace({ ...workspace, tasks: [reopened] })
+    expect((await loadWorkspace()).tasks[0]).toMatchObject({ status: 'doing', completedAt: null, previousStatus: null, subtasks: task.subtasks })
+  })
+
   it('round trips the complete version 1 workspace through IndexedDB', async () => {
     const workspace = createEmptyWorkspace()
     const task = createTask('恢复桌面工作空间', 'doing')
