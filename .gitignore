@@ -5,3 +5,4 @@ dist/
 coverage/
 upload/
 .codex/
+src-tauri/target/

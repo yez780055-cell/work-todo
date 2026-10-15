@@ -10,6 +10,8 @@ import { TaskDrawer } from './components/TaskDrawer'
 import { TaskSearchModal } from './components/TaskSearchModal'
 import { isInCurrentWeek, toDateKey } from './lib/dates'
 import { createEmptyWorkspace, createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
+import { readDesktopBackup, saveDesktopBackup } from './lib/desktopBackup'
+import { isDesktopApp } from './lib/platform'
 import { parseWorkspaceBackup } from './lib/storage'
 import { sanitizeRichText } from './lib/richText'
 import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
@@ -25,7 +27,8 @@ const NAV_ITEMS: Array<{ key: PageKey; label: string; description: string; icon:
 ]
 
 export default function App() {
-  const { data, setData, ready, saveState } = useWorkspace()
+  const { data, setData, ready, saveState, flushWorkspace, replaceWorkspace } = useWorkspace()
+  const isDesktop = isDesktopApp()
   const [activePage, setActivePage] = useState<PageKey>('tasks')
   const [now, setNow] = useState(() => new Date())
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
@@ -39,12 +42,41 @@ export default function App() {
   const [backupError, setBackupError] = useState('')
   const [resetVersion, setResetVersion] = useState(0)
   const isComposing = useRef(false)
+  const flushWorkspaceRef = useRef(flushWorkspace)
+  flushWorkspaceRef.current = flushWorkspace
   const activeTask = data.tasks.find((task) => task.id === activeTaskId) ?? null
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (!isDesktop) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+
+    const attachCloseGuard = async () => {
+      const { registerDesktopCloseGuard } = await import('./lib/desktopCloseGuard')
+      const removeListener = await registerDesktopCloseGuard(async () => {
+        await flushWorkspaceRef.current()
+      }, async () => {
+        const { ask } = await import('@tauri-apps/plugin-dialog')
+        return ask('最新数据保存失败。仍要关闭并放弃尚未保存的更改吗？', {
+          title: 'Work Todo',
+          kind: 'warning',
+        })
+      })
+      if (disposed) removeListener()
+      else unlisten = removeListener
+    }
+
+    void attachCloseGuard().catch((error: unknown) => console.error('无法启用桌面退出保存保护', error))
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [isDesktop])
 
   useEffect(() => {
     const handleOpenBackup = () => setBackupOpen(true)
@@ -187,29 +219,44 @@ export default function App() {
     indexDocument: { html: sanitizeRichText(html), updatedAt: new Date().toISOString() },
   }))
 
-  const exportBackup = () => {
+  const exportBackup = async () => {
     const backup = { format: 'work-todo-backup', version: 1, exportedAt: new Date().toISOString(), workspace: data }
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `work-todo-backup-${localDateKey}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-    setBackupError('')
-    setBackupMessage('备份文件已生成并下载。')
+    const contents = JSON.stringify(backup, null, 2)
+    const fileName = `work-todo-backup-${localDateKey}.json`
+    try {
+      if (isDesktop) {
+        const saved = await saveDesktopBackup(contents, fileName)
+        if (!saved) return
+        setBackupMessage('备份文件已保存。')
+      } else {
+        const blob = new Blob([contents], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = fileName
+        link.click()
+        URL.revokeObjectURL(url)
+        setBackupMessage('备份文件已生成并下载。')
+      }
+      setBackupError('')
+    } catch (error) {
+      setBackupMessage('')
+      setBackupError(error instanceof Error ? error.message : '无法保存备份文件。')
+    }
   }
 
-  const importBackup = async (file: File | undefined) => {
-    if (!file) return
+  const importBackup = async (file?: File) => {
+    if (!isDesktop && !file) return
     try {
-      const contents = await file.text()
+      const contents = isDesktop ? await readDesktopBackup() : await file!.text()
+      if (contents === null) return
       const workspace = parseWorkspaceBackup(JSON.parse(contents))
-      if (!window.confirm('导入后，当前浏览器中的数据会被备份文件替换。请先确认已导出现有数据。')) return
-      setData(workspace)
+      const storageName = isDesktop ? '当前桌面应用' : '当前浏览器'
+      if (!window.confirm(`导入后，${storageName}中的数据会被备份文件替换。请先确认已导出现有数据。`)) return
+      await replaceWorkspace(workspace)
       setResetVersion((value) => value + 1)
       setBackupError('')
-      setBackupMessage('数据已载入，正在保存到本机。')
+      setBackupMessage(isDesktop ? '数据已导入并保存到桌面应用。' : '数据已导入并保存到本机。')
     } catch (error) {
       setBackupMessage('')
       setBackupError(error instanceof Error ? error.message : '无法读取这个备份文件。')
@@ -258,31 +305,32 @@ export default function App() {
 
       {drawerOpen && <TaskDrawer task={activeTask} defaultStatus={newTaskStatus} onSave={updateTask} onDelete={handleDeleteTask} onClose={() => { setDrawerOpen(false); setActiveTaskId(null) }} />}
       {historyOpen && <TaskHistory tasks={data.tasks} onRestore={handleRestoreTask} onClose={() => setHistoryOpen(false)} />}
-      {backupOpen && <BackupModal data={data} saveState={saveState} message={backupMessage} error={backupError} onClose={() => setBackupOpen(false)} onExport={exportBackup} onImport={importBackup} />}
+      {backupOpen && <BackupModal data={data} isDesktop={isDesktop} saveState={saveState} message={backupMessage} error={backupError} onClose={() => setBackupOpen(false)} onExport={exportBackup} onImport={importBackup} />}
       {quickCreateOpen && <QuickCreateModal onClose={() => setQuickCreateOpen(false)} onCreate={createQuickTask} />}
       {taskSearchOpen && <TaskSearchModal tasks={data.tasks} onClose={() => setTaskSearchOpen(false)} onOpenTask={openExistingTask} />}
     </div>
   )
 }
 
-function BackupModal({ data, saveState, message, error, onClose, onExport, onImport }: {
+function BackupModal({ data, isDesktop, saveState, message, error, onClose, onExport, onImport }: {
   data: ReturnType<typeof createEmptyWorkspace>
+  isDesktop: boolean
   saveState: { status: string; message: string; savedAt: string | null }
   message: string
   error: string
   onClose: () => void
   onExport: () => void
-  onImport: (file: File | undefined) => Promise<void>
+  onImport: (file?: File) => Promise<void>
 }) {
   const [importing, setImporting] = useState(false)
   return (
-    <Modal title="本机数据与备份" subtitle="任务与笔记保存在当前浏览器，不会自动同步到其他设备。" onClose={onClose}>
+    <Modal title="本机数据与备份" subtitle={isDesktop ? '数据保存在此设备的桌面应用中，与网页端不自动同步。' : '任务与笔记保存在当前浏览器，不会自动同步到其他设备。'} onClose={onClose}>
       <div className="backup-content">
-        <div className={`backup-status backup-status-${saveState.status}`}><span className="save-dot" /><div><strong>{saveState.message}</strong><small>{saveState.status === 'error' ? '请先下载备份文件，避免浏览器数据丢失。' : '建议定期导出备份，妥善保存在安全位置。'}</small></div></div>
-        <div className="backup-actions"><Button variant="primary" icon={<Download size={16} />} onClick={onExport}>导出全部数据</Button><label className="button button-secondary backup-import-label"><FileUp size={16} />导入备份<input type="file" accept="application/json,.json" onChange={async (event) => { setImporting(true); await onImport(event.target.files?.[0]); event.target.value = ''; setImporting(false) }} /></label></div>
+        <div className={`backup-status backup-status-${saveState.status}`}><span className="save-dot" /><div><strong>{saveState.message}</strong><small>{saveState.status === 'error' ? '请先导出当前数据，避免数据丢失。' : '建议定期导出备份，妥善保存在安全位置。'}</small></div></div>
+        <div className="backup-actions"><Button variant="primary" icon={<Download size={16} />} onClick={() => void onExport()}>导出全部数据</Button>{isDesktop ? <Button icon={<FileUp size={16} />} disabled={importing} onClick={async () => { setImporting(true); await onImport(); setImporting(false) }}>{importing ? '正在读取备份…' : '导入备份'}</Button> : <label className="button button-secondary backup-import-label"><FileUp size={16} />导入备份<input type="file" accept="application/json,.json" onChange={async (event) => { setImporting(true); await onImport(event.target.files?.[0]); event.target.value = ''; setImporting(false) }} /></label>}</div>
         {importing && <p className="backup-message">正在读取备份…</p>}{message && <p className="backup-message"><Check size={14} />{message}</p>}{error && <p className="backup-error"><X size={14} />{error}</p>}
         <div className="backup-details"><span>看板任务 <strong>{data.tasks.length}</strong></span><span>例行规则 <strong>{data.routineRules.length}</strong></span><span>日历排班 <strong>{Object.keys(data.calendarOverrides).length} 天</strong></span></div>
-        <p className="backup-note">备份包含任务、子任务、例行任务完成记录、日历标记和 Index 文档。导入会替换当前浏览器中的全部数据。</p>
+        <p className="backup-note">备份包含任务、子任务、例行任务完成记录、日历标记和 Index 文档。导入会替换{isDesktop ? '当前桌面应用' : '当前浏览器'}中的全部数据。</p>
       </div>
       <footer className="modal-footer"><Button onClick={onClose}>完成</Button></footer>
     </Modal>
