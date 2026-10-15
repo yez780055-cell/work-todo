@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
-import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, LayoutDashboard, Settings2, Sparkles, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, LayoutDashboard, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
 import { Button, Modal, SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
+import { QuickCreateModal } from './components/QuickCreateModal'
 import { RoutinePage, createCompletion } from './components/RoutinePage'
 import { TaskBoard, TaskHistory } from './components/TaskBoard'
 import { TaskDrawer } from './components/TaskDrawer'
+import { TaskSearchModal } from './components/TaskSearchModal'
 import { isInCurrentWeek, toDateKey } from './lib/dates'
-import { createEmptyWorkspace, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
+import { createEmptyWorkspace, createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
 import { parseWorkspaceBackup } from './lib/storage'
 import { sanitizeRichText } from './lib/richText'
 import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
@@ -26,6 +28,8 @@ export default function App() {
   const { data, setData, ready, saveState } = useWorkspace()
   const [activePage, setActivePage] = useState<PageKey>('tasks')
   const [now, setNow] = useState(() => new Date())
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [taskSearchOpen, setTaskSearchOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
@@ -34,6 +38,7 @@ export default function App() {
   const [backupMessage, setBackupMessage] = useState('')
   const [backupError, setBackupError] = useState('')
   const [resetVersion, setResetVersion] = useState(0)
+  const isComposing = useRef(false)
   const activeTask = data.tasks.find((task) => task.id === activeTaskId) ?? null
 
   useEffect(() => {
@@ -45,6 +50,49 @@ export default function App() {
     const handleOpenBackup = () => setBackupOpen(true)
     window.addEventListener('open-backup-settings', handleOpenBackup)
     return () => window.removeEventListener('open-backup-settings', handleOpenBackup)
+  }, [])
+
+  useEffect(() => {
+    const handleCompositionStart = () => { isComposing.current = true }
+    const handleCompositionEnd = () => { isComposing.current = false }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return
+      if (event.isComposing || event.keyCode === 229 || isComposing.current) return
+
+      if (event.key === 'Escape') {
+        const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')
+        const topmostDialog = dialogs.item(dialogs.length - 1)
+        const closeButton = topmostDialog?.querySelector<HTMLButtonElement>('button[aria-label^="关闭"]')
+        if (topmostDialog && closeButton) {
+          event.preventDefault()
+          closeButton.click()
+        }
+        return
+      }
+
+      const hasOpenDialog = document.querySelector('[role="dialog"][aria-modal="true"]') !== null
+      const commandKey = event.ctrlKey || event.metaKey
+      if (commandKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+        if (hasOpenDialog || isContentEditableTarget(event.target)) return
+        event.preventDefault()
+        setTaskSearchOpen(true)
+        return
+      }
+
+      if (event.key.toLowerCase() !== 'n' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      if (hasOpenDialog || isEditableTarget(event.target)) return
+      event.preventDefault()
+      setQuickCreateOpen(true)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('compositionstart', handleCompositionStart)
+    window.addEventListener('compositionend', handleCompositionEnd)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('compositionstart', handleCompositionStart)
+      window.removeEventListener('compositionend', handleCompositionEnd)
+    }
   }, [])
 
   const navItem = NAV_ITEMS.find((item) => item.key === activePage) ?? NAV_ITEMS[0]
@@ -73,6 +121,24 @@ export default function App() {
     setActiveTaskId(null)
     setNewTaskStatus(status)
     setDrawerOpen(true)
+  }
+
+  const openExistingTask = (task: Task) => {
+    setActiveTaskId(task.id)
+    setNewTaskStatus(task.status)
+    setDrawerOpen(true)
+    setTaskSearchOpen(false)
+  }
+
+  const createQuickTask = (title: string, status: TaskStatus, openDetails: boolean) => {
+    const task = createTask(title, status)
+    setData((current) => ({ ...current, tasks: [...current.tasks, task] }))
+    setQuickCreateOpen(false)
+    if (openDetails) {
+      setActiveTaskId(task.id)
+      setNewTaskStatus(status)
+      setDrawerOpen(true)
+    }
   }
 
   const handleRestoreTask = (task: Task) => {
@@ -173,10 +239,17 @@ export default function App() {
       </aside>
 
       <main className="main-area">
-        <header className="topbar"><div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div><div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div></header>
+        <header className="topbar">
+          <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div>
+          <div className="topbar-actions">
+            <button className="button button-secondary topbar-action" type="button" aria-label="快速创建任务" aria-keyshortcuts="N" title="快速创建任务 (N)" onClick={() => setQuickCreateOpen(true)}><Plus size={15} /><span className="topbar-action-label">快速新建</span><kbd>N</kbd></button>
+            <button className="button button-secondary topbar-action" type="button" aria-label="搜索任务" aria-keyshortcuts="Control+K Meta+K" title="搜索任务 (Ctrl/⌘ K)" onClick={() => setTaskSearchOpen(true)}><Search size={15} /><span className="topbar-action-label">搜索任务</span><kbd>Ctrl/⌘ K</kbd></button>
+          </div>
+          <div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div>
+        </header>
         {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setBackupOpen(true)}>打开备份</button></div>}
         <div className={`page-content page-${activePage}`}>
-          {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={(task) => { setActiveTaskId(task.id); setNewTaskStatus(task.status); setDrawerOpen(true) }} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} />}
+          {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={openExistingTask} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} />}
           {activePage === 'routines' && <RoutinePage rules={data.routineRules} completions={data.routineCompletions} dateKey={localDateKey} calendarOverrides={data.calendarOverrides} onToggleCompletion={toggleRoutine} onSaveRule={saveRoutineRule} onDeleteRule={deleteRoutineRule} onToggleRule={toggleRoutineRule} />}
           {activePage === 'calendar' && <CalendarPage overrides={data.calendarOverrides} onSetDays={setCalendarDays} />}
           {activePage === 'index' && <IndexPage html={data.indexDocument.html} saveState={saveState} onChange={updateIndex} resetVersion={resetVersion} />}
@@ -186,6 +259,8 @@ export default function App() {
       {drawerOpen && <TaskDrawer task={activeTask} defaultStatus={newTaskStatus} onSave={updateTask} onDelete={handleDeleteTask} onClose={() => { setDrawerOpen(false); setActiveTaskId(null) }} />}
       {historyOpen && <TaskHistory tasks={data.tasks} onRestore={handleRestoreTask} onClose={() => setHistoryOpen(false)} />}
       {backupOpen && <BackupModal data={data} saveState={saveState} message={backupMessage} error={backupError} onClose={() => setBackupOpen(false)} onExport={exportBackup} onImport={importBackup} />}
+      {quickCreateOpen && <QuickCreateModal onClose={() => setQuickCreateOpen(false)} onCreate={createQuickTask} />}
+      {taskSearchOpen && <TaskSearchModal tasks={data.tasks} onClose={() => setTaskSearchOpen(false)} onOpenTask={openExistingTask} />}
     </div>
   )
 }
@@ -212,4 +287,21 @@ function BackupModal({ data, saveState, message, error, onClose, onExport, onImp
       <footer className="modal-footer"><Button onClick={onClose}>完成</Button></footer>
     </Modal>
   )
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target instanceof Element
+    ? target
+    : document.activeElement instanceof Element ? document.activeElement : null
+  return element !== null && (
+    element.matches('input, textarea, select') ||
+    element.closest('[contenteditable]:not([contenteditable="false"])') !== null
+  )
+}
+
+function isContentEditableTarget(target: EventTarget | null): boolean {
+  const element = target instanceof Element
+    ? target
+    : document.activeElement instanceof Element ? document.activeElement : null
+  return element !== null && element.closest('[contenteditable]:not([contenteditable="false"])') !== null
 }
