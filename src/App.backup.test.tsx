@@ -14,7 +14,7 @@ vi.mock('./lib/storage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./lib/storage')>()
   return { ...actual, loadWorkspace: loadWorkspaceMock, saveWorkspace: saveWorkspaceMock }
 })
-vi.mock('./lib/platform', () => ({ isDesktopApp: () => true }))
+vi.mock('./lib/platform', () => ({ isDesktopApp: () => true, isWindowsDesktopApp: () => false }))
 vi.mock('./lib/desktopBackup', () => ({
   readDesktopBackup: readDesktopBackupMock,
   saveDesktopBackup: saveDesktopBackupMock,

@@ -431,6 +431,47 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .task-board { grid-template-columns: repeat(4, minmax(175px, 1fr)); }
 }
 
+.shortcut-settings-page { max-width: 960px; margin: 0 auto; }
+.shortcut-settings-intro { display: flex; align-items: center; gap: 13px; margin: 2px 0 20px; }
+.shortcut-settings-intro-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; color: #5872c7; background: #edf0fb; }
+.shortcut-settings-intro h2 { margin: 0; color: #333c4c; font-size: 20px; }
+.shortcut-settings-intro p { margin: 5px 0 0; color: #737d8d; font-size: 12px; }
+.shortcut-settings-warning, .shortcut-unsupported, .shortcut-focus-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #e7eaf2; border-radius: 9px; color: #626d7e; background: #fafbfe; font-size: 12px; line-height: 1.55; }
+.shortcut-settings-warning { color: #a06426; border-color: #f0dfc3; background: #fffaf1; }
+.shortcut-settings-group { margin-top: 15px; overflow: hidden; border: 1px solid #e7e9ee; border-radius: 13px; background: #fff; box-shadow: 0 7px 24px rgba(40,49,68,.025); }
+.shortcut-settings-group > header { padding: 16px 18px 12px; border-bottom: 1px solid #f0f1f4; }
+.shortcut-settings-group h3 { margin: 0; color: #414957; font-size: 14px; }
+.shortcut-settings-group header p { margin: 5px 0 0; color: #737d8d; font-size: 11px; }
+.shortcut-settings-group > .shortcut-focus-note, .shortcut-settings-group > .shortcut-unsupported { margin: 12px 15px 0; }
+.shortcut-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 15px 18px; border-bottom: 1px solid #f1f2f5; }
+.shortcut-setting-row:last-child { border-bottom: 0; }
+.shortcut-setting-copy { min-width: 0; display: grid; gap: 4px; }
+.shortcut-setting-copy > strong { color: #424b59; font-size: 12px; }
+.shortcut-setting-copy > small { color: #737d8d; font-size: 11px; line-height: 1.5; }
+.shortcut-status { color: #687486; font-size: 10px; line-height: 1.4; }
+.shortcut-status-active { color: #4d8b6b; }
+.shortcut-status-conflict, .shortcut-status-error { color: #ae6262; }
+.shortcut-status-unsupported { color: #858b96; }
+.shortcut-setting-controls { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.shortcut-setting-controls > kbd, .shortcut-capture-row > kbd { min-width: 94px; padding: 7px 9px; border: 1px solid #e6e8ed; border-radius: 7px; color: #566276; background: #f8f9fb; font: 600 11px Manrope, sans-serif; text-align: center; }
+.shortcut-setting-controls .button { min-height: 30px; padding: 0 9px; font-size: 11px; }
+.shortcut-reset-button { width: 31px; height: 31px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 7px; color: #737d8d; background: transparent; cursor: pointer; }
+.shortcut-reset-button:hover { border-color: #e7e9ef; color: #536bb9; background: #f8f9fc; }
+.shortcut-editor-content { display: grid; gap: 15px; padding: 19px 22px 20px; }
+.shortcut-enabled-toggle { display: inline-flex; align-items: center; gap: 8px; color: #505968; font-size: 12px; }
+.shortcut-enabled-toggle input { accent-color: #5976d2; }
+.shortcut-capture-row { display: flex; align-items: center; gap: 9px; padding: 12px; border: 1px solid #e9ebf0; border-radius: 10px; background: #fbfbfd; }
+.shortcut-capture-row > div { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.shortcut-capture-row > div span { color: #505968; font-size: 12px; font-weight: 600; }
+.shortcut-capture-row > div small { color: #737d8d; font-size: 10px; line-height: 1.5; }
+.shortcut-capture-row .button { min-height: 33px; padding: 0 10px; font-size: 11px; }
+.shortcut-capture-hint, .shortcut-editor-feedback { margin: 0; color: #a06426; font-size: 11px; line-height: 1.5; }
+.shortcut-editor-feedback { color: #ae565b; }
+.shortcut-preview { display: flex; justify-content: space-between; gap: 12px; margin: 0; padding-top: 11px; border-top: 1px solid #eff0f4; color: #737d8d; font-size: 11px; }
+.shortcut-preview strong { color: #4e5f8c; font: 600 11px Manrope, sans-serif; }
+.shortcut-runtime-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 22px; color: #9e5d25; background: #fff8ec; border-bottom: 1px solid #f0e1c9; font-size: 12px; }
+.shortcut-runtime-error button { border: 0; color: #855b2d; background: transparent; cursor: pointer; font-size: 11px; }
+
 @media (max-width: 790px) {
   .app-shell { display: block; }
   .sidebar { position: sticky; top: 0; z-index: 12; width: 100%; min-height: 0; padding: 9px 12px 7px; border-right: 0; border-bottom: 1px solid #e7e9ee; }
@@ -438,7 +479,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .brand-mark { width: 29px; height: 29px; border-radius: 9px; }
   .brand-lockup strong { font-size: 12px; }
   .brand-lockup span, .workspace-label, .sidebar-bottom { display: none; }
-  .main-nav { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .main-nav { grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .nav-item { min-height: 43px; justify-content: center; padding: 5px 3px; border-radius: 9px; }
   .nav-icon { width: 29px; height: 29px; flex-basis: 29px; border-radius: 8px; }
   .nav-copy { display: none; }
@@ -484,6 +525,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .drawer-header { padding: 21px 18px 16px; }
   .drawer-footer { padding: 11px 18px; }
   .side-drawer { width: min(100%, 470px); }
+  .shortcut-setting-row { align-items: flex-start; flex-direction: column; padding: 13px; }
+  .shortcut-setting-controls { width: 100%; flex-wrap: wrap; }
+  .shortcut-setting-controls > kbd { margin-right: auto; }
+  .shortcut-capture-row { flex-wrap: wrap; }
+  .shortcut-capture-row > div { flex-basis: 100%; }
 }
 
 @media (max-width: 420px) {
