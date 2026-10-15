@@ -279,7 +279,7 @@ export default function App() {
           })}
         </nav>
         <div className="sidebar-bottom">
-          <div className="local-storage-card"><div className="storage-card-icon"><Sparkles size={15} /></div><div><strong>本机优先</strong><span>数据仅保存在当前浏览器</span></div></div>
+          <div className="local-storage-card"><div className="storage-card-icon"><Sparkles size={15} /></div><div><strong>本机优先</strong><span>数据仅保存在{isDesktop ? '当前桌面应用' : '当前浏览器'}</span></div></div>
           <button className="backup-nav" onClick={() => { setBackupMessage(''); setBackupError(''); setBackupOpen(true) }}><Settings2 size={16} />数据备份</button>
           <div className="sidebar-profile"><span className="profile-avatar">W</span><span><strong>我的工作空间</strong><small>仅自己使用</small></span><CircleHelp size={16} /></div>
         </div>

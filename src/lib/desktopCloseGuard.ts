@@ -6,20 +6,15 @@ export function registerDesktopCloseGuard(
   confirmDiscard: () => Promise<boolean>,
 ): Promise<UnlistenFn> {
   const appWindow = getCurrentWindow()
-  let closing = false
   return appWindow.onCloseRequested(async (event) => {
-    if (closing) return
-    event.preventDefault()
     try {
       await flush()
     } catch {
       try {
-        if (!await confirmDiscard()) return
+        if (!await confirmDiscard()) event.preventDefault()
       } catch {
-        return
+        event.preventDefault()
       }
     }
-    closing = true
-    try { await appWindow.close() } catch { closing = false }
   })
 }

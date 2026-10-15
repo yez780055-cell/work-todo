@@ -43,6 +43,7 @@ describe('desktop data backup experience', () => {
 
     render(<App />)
     await screen.findByRole('button', { name: '数据备份' })
+    expect(screen.getByText('数据仅保存在当前桌面应用')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '数据备份' }))
 
     const dialog = await screen.findByRole('dialog', { name: '本机数据与备份' })

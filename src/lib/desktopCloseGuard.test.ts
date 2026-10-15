@@ -1,22 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerDesktopCloseGuard } from './desktopCloseGuard'
 
-const { onCloseRequestedMock, closeMock } = vi.hoisted(() => ({
+const { onCloseRequestedMock } = vi.hoisted(() => ({
   onCloseRequestedMock: vi.fn(),
-  closeMock: vi.fn(),
 }))
 
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ onCloseRequested: onCloseRequestedMock, close: closeMock }),
+  getCurrentWindow: () => ({ onCloseRequested: onCloseRequestedMock }),
 }))
 
 describe('desktop close save guard', () => {
   beforeEach(() => {
     onCloseRequestedMock.mockReset()
-    closeMock.mockReset().mockResolvedValue(undefined)
   })
 
-  it('prevents the native close until the pending workspace write completes', async () => {
+  it('finishes the pending workspace write before allowing the native close', async () => {
     let handler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined
     onCloseRequestedMock.mockImplementation(async (callback) => {
       handler = callback
@@ -24,13 +22,13 @@ describe('desktop close save guard', () => {
     })
     const order: string[] = []
     const flush = vi.fn(async () => { order.push('flush') })
-    closeMock.mockImplementation(async () => { order.push('close') })
     await registerDesktopCloseGuard(flush, async () => false)
     const event = { preventDefault: vi.fn(() => { order.push('prevent') }) }
 
     await handler?.(event)
 
-    expect(order).toEqual(['prevent', 'flush', 'close'])
+    expect(order).toEqual(['flush'])
+    expect(event.preventDefault).not.toHaveBeenCalled()
     expect(flush).toHaveBeenCalledOnce()
   })
 
@@ -48,10 +46,9 @@ describe('desktop close save guard', () => {
 
     expect(preventDefault).toHaveBeenCalledOnce()
     expect(confirmDiscard).toHaveBeenCalledOnce()
-    expect(closeMock).not.toHaveBeenCalled()
   })
 
-  it('allows an explicit close after the user confirms unsaved changes may be lost', async () => {
+  it('allows the native close after the user confirms unsaved changes may be lost', async () => {
     let handler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined
     onCloseRequestedMock.mockImplementation(async (callback) => {
       handler = callback
@@ -59,8 +56,23 @@ describe('desktop close save guard', () => {
     })
     await registerDesktopCloseGuard(async () => { throw new Error('save failed') }, async () => true)
 
-    await handler?.({ preventDefault: vi.fn() })
+    const preventDefault = vi.fn()
+    await handler?.({ preventDefault })
 
-    expect(closeMock).toHaveBeenCalledOnce()
+    expect(preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('keeps the window open when the discard confirmation fails', async () => {
+    let handler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined
+    onCloseRequestedMock.mockImplementation(async (callback) => {
+      handler = callback
+      return () => undefined
+    })
+    const preventDefault = vi.fn()
+    await registerDesktopCloseGuard(async () => { throw new Error('save failed') }, async () => { throw new Error('dialog failed') })
+
+    await handler?.({ preventDefault })
+
+    expect(preventDefault).toHaveBeenCalledOnce()
   })
 })
