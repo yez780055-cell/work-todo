@@ -6,10 +6,15 @@
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
     "dialog:allow-message",
     "dialog:allow-open",
     "dialog:allow-save",
     "fs:allow-read-text-file",
-    "fs:allow-write-text-file"
+    "fs:allow-write-text-file",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
   ]
 }

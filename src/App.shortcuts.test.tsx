@@ -53,6 +53,25 @@ describe('global task shortcuts and quick creation', () => {
   beforeEach(() => {
     loadWorkspaceMock.mockReset()
     saveWorkspaceMock.mockReset()
+    window.localStorage.clear()
+  })
+
+  it('applies a saved custom in-window shortcut and shows the Windows-only global limitation', async () => {
+    await renderWorkspace()
+    fireEvent.click(screen.getByRole('button', { name: /快捷键/ }))
+    expect(screen.getByRole('heading', { name: '窗口内快捷键' })).not.toBeNull()
+    expect(screen.getByText(/当前运行环境不支持注册系统级快捷键/)).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑窗口内快捷键：快速新建任务' }))
+    fireEvent.click(screen.getByRole('button', { name: '录入组合键' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: '正在录入快捷键，按 Esc 取消录入' }), { key: 'y', ctrlKey: true, shiftKey: true })
+    fireEvent.click(screen.getByRole('button', { name: '保存设置' }))
+    await waitFor(() => expect(window.localStorage.getItem('worktodo.shortcut-settings.v1')).toContain('Ctrl+Shift+Y'))
+    fireEvent.keyDown(document.body, { key: 'y', ctrlKey: true, shiftKey: true })
+    expect(screen.getByRole('dialog', { name: '快速创建任务' })).not.toBeNull()
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '任务标题' }), { key: 'Escape' })
+    fireEvent.keyDown(document.body, { key: 'n' })
+    expect(screen.queryByRole('dialog', { name: '快速创建任务' })).toBeNull()
   })
 
   it('opens quick creation with N and focuses its title field', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, LayoutDashboard, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
+import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, Keyboard, LayoutDashboard, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
 import { Button, Modal, SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
@@ -8,27 +8,34 @@ import { RoutinePage, createCompletion } from './components/RoutinePage'
 import { TaskBoard, TaskHistory } from './components/TaskBoard'
 import { TaskDrawer } from './components/TaskDrawer'
 import { TaskSearchModal } from './components/TaskSearchModal'
+import { ShortcutSettingsPage } from './components/ShortcutSettingsPage'
 import { isInCurrentWeek, toDateKey } from './lib/dates'
 import { createEmptyWorkspace, createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
 import { readDesktopBackup, saveDesktopBackup } from './lib/desktopBackup'
-import { isDesktopApp } from './lib/platform'
+import { isDesktopApp, isWindowsDesktopApp } from './lib/platform'
+import { GLOBAL_SHORTCUT_ERROR_EVENT, GLOBAL_SHORTCUT_EVENT } from './lib/desktopShortcuts'
+import { ariaShortcut, matchesShortcutEvent, type ShortcutAction } from './lib/shortcuts'
 import { parseWorkspaceBackup } from './lib/storage'
 import { sanitizeRichText } from './lib/richText'
 import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
 import { useWorkspace } from './useWorkspace'
+import { useShortcutSettings } from './useShortcutSettings'
 
-type PageKey = 'tasks' | 'routines' | 'calendar' | 'index'
+type PageKey = 'tasks' | 'routines' | 'calendar' | 'index' | 'shortcuts'
 
 const NAV_ITEMS: Array<{ key: PageKey; label: string; description: string; icon: typeof LayoutDashboard }> = [
   { key: 'tasks', label: '任务看板', description: '推进中的工作事项', icon: LayoutDashboard },
   { key: 'routines', label: '例行任务', description: '每天固定要做的事', icon: ClipboardList },
   { key: 'calendar', label: '工作日历', description: '记录你的真实排班', icon: CalendarDays },
   { key: 'index', label: 'Index', description: '留住工作经验与想法', icon: BookOpenText },
+  { key: 'shortcuts', label: '快捷键', description: '设置窗口与全局快捷键', icon: Keyboard },
 ]
 
 export default function App() {
   const { data, setData, ready, saveState, flushWorkspace, replaceWorkspace } = useWorkspace()
   const isDesktop = isDesktopApp()
+  const isWindowsDesktop = isWindowsDesktopApp()
+  const shortcutSettings = useShortcutSettings()
   const [activePage, setActivePage] = useState<PageKey>('tasks')
   const [now, setNow] = useState(() => new Date())
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
@@ -41,7 +48,12 @@ export default function App() {
   const [backupMessage, setBackupMessage] = useState('')
   const [backupError, setBackupError] = useState('')
   const [resetVersion, setResetVersion] = useState(0)
+  const [shortcutRuntimeError, setShortcutRuntimeError] = useState('')
   const isComposing = useRef(false)
+  const shortcutSettingsRef = useRef(shortcutSettings.settings)
+  const openDialogsRef = useRef(false)
+  shortcutSettingsRef.current = shortcutSettings.settings
+  openDialogsRef.current = drawerOpen || historyOpen || backupOpen || quickCreateOpen || taskSearchOpen
   const flushWorkspaceRef = useRef(flushWorkspace)
   flushWorkspaceRef.current = flushWorkspace
   const activeTask = data.tasks.find((task) => task.id === activeTaskId) ?? null
@@ -49,6 +61,27 @@ export default function App() {
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const handleGlobalShortcut = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: ShortcutAction }>).detail?.action
+      if (action !== 'quickCreate' && action !== 'searchTasks') return
+      if (openDialogsRef.current || document.querySelector('[role="dialog"][aria-modal="true"]')) return
+      if (action === 'quickCreate') setQuickCreateOpen(true)
+      else setTaskSearchOpen(true)
+      setShortcutRuntimeError('')
+    }
+    const handleShortcutError = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail
+      setShortcutRuntimeError(typeof message === 'string' ? message : '无法将 Work Todo 窗口置于前台。')
+    }
+    window.addEventListener(GLOBAL_SHORTCUT_EVENT, handleGlobalShortcut)
+    window.addEventListener(GLOBAL_SHORTCUT_ERROR_EVENT, handleShortcutError)
+    return () => {
+      window.removeEventListener(GLOBAL_SHORTCUT_EVENT, handleGlobalShortcut)
+      window.removeEventListener(GLOBAL_SHORTCUT_ERROR_EVENT, handleShortcutError)
+    }
   }, [])
 
   useEffect(() => {
@@ -103,15 +136,21 @@ export default function App() {
       }
 
       const hasOpenDialog = document.querySelector('[role="dialog"][aria-modal="true"]') !== null
-      const commandKey = event.ctrlKey || event.metaKey
-      if (commandKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+      const bindings = shortcutSettingsRef.current.bindings
+      const searchBinding = bindings['window.searchTasks']
+      const quickCreateBinding = bindings['window.quickCreate']
+      const searchMatches = searchBinding.enabled && (
+        matchesShortcutEvent(event, searchBinding.shortcut) ||
+        (searchBinding.shortcut === 'Ctrl+K' && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k')
+      )
+      if (searchMatches) {
         if (hasOpenDialog || isContentEditableTarget(event.target)) return
         event.preventDefault()
         setTaskSearchOpen(true)
         return
       }
 
-      if (event.key.toLowerCase() !== 'n' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      if (!quickCreateBinding.enabled || !matchesShortcutEvent(event, quickCreateBinding.shortcut)) return
       if (hasOpenDialog || isEditableTarget(event.target)) return
       event.preventDefault()
       setQuickCreateOpen(true)
@@ -289,17 +328,19 @@ export default function App() {
         <header className="topbar">
           <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div>
           <div className="topbar-actions">
-            <button className="button button-secondary topbar-action" type="button" aria-label="快速创建任务" aria-keyshortcuts="N" title="快速创建任务 (N)" onClick={() => setQuickCreateOpen(true)}><Plus size={15} /><span className="topbar-action-label">快速新建</span><kbd>N</kbd></button>
-            <button className="button button-secondary topbar-action" type="button" aria-label="搜索任务" aria-keyshortcuts="Control+K Meta+K" title="搜索任务 (Ctrl/⌘ K)" onClick={() => setTaskSearchOpen(true)}><Search size={15} /><span className="topbar-action-label">搜索任务</span><kbd>Ctrl/⌘ K</kbd></button>
+            <button className="button button-secondary topbar-action" type="button" aria-label="快速创建任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.quickCreate'].shortcut)} title="快速创建任务" onClick={() => setQuickCreateOpen(true)}><Plus size={15} /><span className="topbar-action-label">快速新建</span><kbd>{shortcutSettings.settings.bindings['window.quickCreate'].enabled ? shortcutSettings.settings.bindings['window.quickCreate'].shortcut : '未分配'}</kbd></button>
+            <button className="button button-secondary topbar-action" type="button" aria-label="搜索任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.searchTasks'].shortcut)} title="搜索任务" onClick={() => setTaskSearchOpen(true)}><Search size={15} /><span className="topbar-action-label">搜索任务</span><kbd>{shortcutSettings.settings.bindings['window.searchTasks'].enabled ? shortcutSettings.settings.bindings['window.searchTasks'].shortcut : '未分配'}</kbd></button>
           </div>
           <div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div>
         </header>
         {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setBackupOpen(true)}>打开备份</button></div>}
+        {shortcutRuntimeError && <div className="shortcut-runtime-error" role="alert">快捷键唤起提示：{shortcutRuntimeError}<button aria-label="关闭快捷键提示" onClick={() => setShortcutRuntimeError('')}>关闭</button></div>}
         <div className={`page-content page-${activePage}`}>
           {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={openExistingTask} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} />}
           {activePage === 'routines' && <RoutinePage rules={data.routineRules} completions={data.routineCompletions} dateKey={localDateKey} calendarOverrides={data.calendarOverrides} onToggleCompletion={toggleRoutine} onSaveRule={saveRoutineRule} onDeleteRule={deleteRoutineRule} onToggleRule={toggleRoutineRule} />}
           {activePage === 'calendar' && <CalendarPage overrides={data.calendarOverrides} onSetDays={setCalendarDays} />}
           {activePage === 'index' && <IndexPage html={data.indexDocument.html} saveState={saveState} onChange={updateIndex} resetVersion={resetVersion} />}
+          {activePage === 'shortcuts' && <ShortcutSettingsPage controller={shortcutSettings} isWindowsDesktop={isWindowsDesktop} />}
         </div>
       </main>
 
