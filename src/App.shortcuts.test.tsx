@@ -58,7 +58,10 @@ describe('global task shortcuts and quick creation', () => {
 
   it('applies a saved custom in-window shortcut and shows the Windows-only global limitation', async () => {
     await renderWorkspace()
-    fireEvent.click(screen.getByRole('button', { name: /快捷键/ }))
+    const mainNavigation = within(screen.getByRole('navigation', { name: '主导航' }))
+    expect(mainNavigation.queryByRole('button', { name: /快捷键/ })).toBeNull()
+    fireEvent.click(document.querySelector('.settings-nav') as HTMLButtonElement)
+    expect(await screen.findByRole('heading', { name: '设置' })).not.toBeNull()
     expect(screen.getByRole('heading', { name: '窗口内快捷键' })).not.toBeNull()
     expect(screen.getByText(/当前运行环境不支持注册系统级快捷键/)).not.toBeNull()
 
@@ -176,6 +179,16 @@ describe('global task shortcuts and quick creation', () => {
     await waitFor(() => expect(saveWorkspaceMock).toHaveBeenCalled())
     expect(lastSavedWorkspace().tasks.find((task) => task.title === '需要复核的任务')?.status).toBe('review')
   })
+
+  it('removes the completed-task badge from the board navigation and keeps column counts', async () => {
+    const completed = taskFixture('本周已完成', 'done', { completedAt: new Date().toISOString() })
+    await renderWorkspace([taskFixture('待办任务'), completed])
+
+    const taskNavigation = screen.getByRole('button', { name: /任务看板/ })
+    expect(taskNavigation.querySelector('.nav-count')).toBeNull()
+    expect(document.querySelector('.column-todo .column-count')?.textContent).toBe('1')
+    expect(document.querySelector('.column-done .column-count')?.textContent).toBe('1')
+  })
 })
 
 describe('global task search', () => {
@@ -191,14 +204,17 @@ describe('global task search', () => {
       /例行任务/,
       /工作日历/,
       /Index/,
+      /设置/,
     ]
+    const mainNavigation = within(screen.getByRole('navigation', { name: '主导航' }))
     for (const [index, page] of pages.entries()) {
-      fireEvent.click(screen.getByRole('button', { name: page }))
+      fireEvent.click(mainNavigation.getByRole('button', { name: page }))
       openTaskSearch(index % 2 === 0 ? 'metaKey' : 'ctrlKey')
       fireEvent.keyDown(screen.getByRole('textbox', { name: '搜索任务标题、备注或子任务' }), { key: 'Escape' })
       expect(screen.queryByRole('dialog', { name: '全局任务搜索' })).toBeNull()
     }
 
+    fireEvent.click(mainNavigation.getByRole('button', { name: /Index/ }))
     const editor = screen.getByRole('textbox', { name: '工作 Index 主文档' })
     fireEvent.keyDown(editor, { key: 'k', ctrlKey: true })
     expect(screen.queryByRole('dialog', { name: '全局任务搜索' })).toBeNull()

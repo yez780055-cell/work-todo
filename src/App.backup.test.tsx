@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import App from './App'
 import { createEmptyWorkspace, createTask } from './lib/model'
 
@@ -31,7 +31,7 @@ describe('desktop data backup experience', () => {
     saveDesktopBackupMock.mockReset().mockResolvedValue(true)
   })
 
-  it('explains desktop data isolation and waits for persistence after backup import', async () => {
+  it('keeps desktop backup import and data isolation inside the Settings page', async () => {
     const imported = createEmptyWorkspace()
     imported.tasks.push(createTask('来自网页的备份'))
     readDesktopBackupMock.mockResolvedValue(JSON.stringify({
@@ -42,16 +42,27 @@ describe('desktop data backup experience', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     render(<App />)
-    await screen.findByRole('button', { name: '数据备份' })
+    await screen.findByRole('button', { name: '快速创建任务' })
     expect(screen.getByText('数据仅保存在当前桌面应用')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '数据备份' }))
+    fireEvent.click(document.querySelector('.settings-nav') as HTMLButtonElement)
 
-    const dialog = await screen.findByRole('dialog', { name: '本机数据与备份' })
-    expect(dialog.textContent).toContain('与网页端不自动同步')
-    expect(dialog.querySelector('input[type="file"]')).toBeNull()
+    expect(await screen.findByRole('heading', { name: '本机数据与备份' })).toBeTruthy()
+    expect(screen.getByText(/与网页端不自动同步/)).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: '本机数据与备份' })).toBeNull()
+    expect(document.querySelector('.settings-page')).toBeTruthy()
+    expect(document.querySelector('.settings-page input[type="file"]')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '导入备份' }))
     await screen.findByText('数据已导入并保存到桌面应用。')
     expect(saveWorkspaceMock).toHaveBeenCalledWith(imported)
+  })
+
+  it('routes the Index backup shortcut to Settings', async () => {
+    render(<App />)
+    await screen.findByRole('button', { name: '快速创建任务' })
+    const mainNavigation = screen.getByRole('navigation', { name: '主导航' })
+    fireEvent.click(within(mainNavigation).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: '导入 / 导出备份' }))
+    expect(await screen.findByRole('heading', { name: '本机数据与备份' })).toBeTruthy()
   })
 })

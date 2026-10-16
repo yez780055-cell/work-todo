@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, Keyboard, LayoutDashboard, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { BookOpenText, BriefcaseBusiness, CalendarDays, CircleHelp, ClipboardList, LayoutDashboard, Plus, Search, Settings2, Sparkles } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
-import { Button, Modal, SaveIndicator } from './components/common'
+import { SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
 import { QuickCreateModal } from './components/QuickCreateModal'
 import { RoutinePage, createCompletion } from './components/RoutinePage'
 import { TaskBoard, TaskHistory } from './components/TaskBoard'
 import { TaskDrawer } from './components/TaskDrawer'
 import { TaskSearchModal } from './components/TaskSearchModal'
-import { ShortcutSettingsPage } from './components/ShortcutSettingsPage'
-import { isInCurrentWeek, toDateKey } from './lib/dates'
-import { createEmptyWorkspace, createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
+import { SettingsPage } from './components/SettingsPage'
+import { toDateKey } from './lib/dates'
+import { createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
 import { readDesktopBackup, saveDesktopBackup } from './lib/desktopBackup'
 import { isDesktopApp, isWindowsDesktopApp } from './lib/platform'
 import { GLOBAL_SHORTCUT_ERROR_EVENT, GLOBAL_SHORTCUT_EVENT } from './lib/desktopShortcuts'
@@ -21,14 +21,13 @@ import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
 import { useWorkspace } from './useWorkspace'
 import { useShortcutSettings } from './useShortcutSettings'
 
-type PageKey = 'tasks' | 'routines' | 'calendar' | 'index' | 'shortcuts'
+type PageKey = 'tasks' | 'routines' | 'calendar' | 'index' | 'settings'
 
 const NAV_ITEMS: Array<{ key: PageKey; label: string; description: string; icon: typeof LayoutDashboard }> = [
   { key: 'tasks', label: '任务看板', description: '推进中的工作事项', icon: LayoutDashboard },
   { key: 'routines', label: '例行任务', description: '每天固定要做的事', icon: ClipboardList },
   { key: 'calendar', label: '工作日历', description: '记录你的真实排班', icon: CalendarDays },
   { key: 'index', label: 'Index', description: '留住工作经验与想法', icon: BookOpenText },
-  { key: 'shortcuts', label: '快捷键', description: '设置窗口与全局快捷键', icon: Keyboard },
 ]
 
 export default function App() {
@@ -44,7 +43,6 @@ export default function App() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [backupOpen, setBackupOpen] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [backupError, setBackupError] = useState('')
   const [resetVersion, setResetVersion] = useState(0)
@@ -53,7 +51,7 @@ export default function App() {
   const shortcutSettingsRef = useRef(shortcutSettings.settings)
   const openDialogsRef = useRef(false)
   shortcutSettingsRef.current = shortcutSettings.settings
-  openDialogsRef.current = drawerOpen || historyOpen || backupOpen || quickCreateOpen || taskSearchOpen
+  openDialogsRef.current = drawerOpen || historyOpen || quickCreateOpen || taskSearchOpen
   const flushWorkspaceRef = useRef(flushWorkspace)
   flushWorkspaceRef.current = flushWorkspace
   const activeTask = data.tasks.find((task) => task.id === activeTaskId) ?? null
@@ -112,7 +110,7 @@ export default function App() {
   }, [isDesktop])
 
   useEffect(() => {
-    const handleOpenBackup = () => setBackupOpen(true)
+    const handleOpenBackup = () => setActivePage('settings')
     window.addEventListener('open-backup-settings', handleOpenBackup)
     return () => window.removeEventListener('open-backup-settings', handleOpenBackup)
   }, [])
@@ -166,8 +164,9 @@ export default function App() {
     }
   }, [])
 
-  const navItem = NAV_ITEMS.find((item) => item.key === activePage) ?? NAV_ITEMS[0]
-  const completedThisWeek = useMemo(() => data.tasks.filter((task) => task.status === 'done' && isInCurrentWeek(task.completedAt, now)).length, [data.tasks, now])
+  const currentPageLabel = activePage === 'settings'
+    ? '设置'
+    : NAV_ITEMS.find((item) => item.key === activePage)?.label ?? NAV_ITEMS[0].label
   const localDateKey = toDateKey(now)
   const weekday = now.toLocaleDateString('zh-CN', { weekday: 'long' })
   const headerDate = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 · ${weekday}`
@@ -313,68 +312,55 @@ export default function App() {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon
             return <button key={item.key} className={`nav-item ${activePage === item.key ? 'nav-item-active' : ''}`} onClick={() => setActivePage(item.key)} aria-current={activePage === item.key ? 'page' : undefined}>
-              <span className="nav-icon"><Icon size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>{item.label}</strong><small>{item.description}</small></span>{item.key === 'tasks' && completedThisWeek > 0 && <span className="nav-count">{completedThisWeek}</span>}
+              <span className="nav-icon"><Icon size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>{item.label}</strong><small>{item.description}</small></span>
             </button>
           })}
+          <button className={`nav-item mobile-settings-nav ${activePage === 'settings' ? 'nav-item-active' : ''}`} type="button" aria-label="设置" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}>
+            <span className="nav-icon"><Settings2 size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>设置</strong></span>
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="local-storage-card"><div className="storage-card-icon"><Sparkles size={15} /></div><div><strong>本机优先</strong><span>数据仅保存在{isDesktop ? '当前桌面应用' : '当前浏览器'}</span></div></div>
-          <button className="backup-nav" onClick={() => { setBackupMessage(''); setBackupError(''); setBackupOpen(true) }}><Settings2 size={16} />数据备份</button>
+          <button className={`settings-nav ${activePage === 'settings' ? 'settings-nav-active' : ''}`} type="button" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}><Settings2 size={16} />设置</button>
           <div className="sidebar-profile"><span className="profile-avatar">W</span><span><strong>我的工作空间</strong><small>仅自己使用</small></span><CircleHelp size={16} /></div>
         </div>
       </aside>
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div>
+          <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{currentPageLabel}</strong></div>
           <div className="topbar-actions">
             <button className="button button-secondary topbar-action" type="button" aria-label="快速创建任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.quickCreate'].shortcut)} title="快速创建任务" onClick={() => setQuickCreateOpen(true)}><Plus size={15} /><span className="topbar-action-label">快速新建</span><kbd>{shortcutSettings.settings.bindings['window.quickCreate'].enabled ? shortcutSettings.settings.bindings['window.quickCreate'].shortcut : '未分配'}</kbd></button>
             <button className="button button-secondary topbar-action" type="button" aria-label="搜索任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.searchTasks'].shortcut)} title="搜索任务" onClick={() => setTaskSearchOpen(true)}><Search size={15} /><span className="topbar-action-label">搜索任务</span><kbd>{shortcutSettings.settings.bindings['window.searchTasks'].enabled ? shortcutSettings.settings.bindings['window.searchTasks'].shortcut : '未分配'}</kbd></button>
           </div>
           <div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div>
         </header>
-        {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setBackupOpen(true)}>打开备份</button></div>}
+        {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setActivePage('settings')}>打开备份设置</button></div>}
         {shortcutRuntimeError && <div className="shortcut-runtime-error" role="alert">快捷键唤起提示：{shortcutRuntimeError}<button aria-label="关闭快捷键提示" onClick={() => setShortcutRuntimeError('')}>关闭</button></div>}
         <div className={`page-content page-${activePage}`}>
           {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={openExistingTask} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} />}
           {activePage === 'routines' && <RoutinePage rules={data.routineRules} completions={data.routineCompletions} dateKey={localDateKey} calendarOverrides={data.calendarOverrides} onToggleCompletion={toggleRoutine} onSaveRule={saveRoutineRule} onDeleteRule={deleteRoutineRule} onToggleRule={toggleRoutineRule} />}
           {activePage === 'calendar' && <CalendarPage overrides={data.calendarOverrides} onSetDays={setCalendarDays} />}
           {activePage === 'index' && <IndexPage html={data.indexDocument.html} saveState={saveState} onChange={updateIndex} resetVersion={resetVersion} />}
-          {activePage === 'shortcuts' && <ShortcutSettingsPage controller={shortcutSettings} isWindowsDesktop={isWindowsDesktop} />}
+          {activePage === 'settings' && <SettingsPage
+            shortcutController={shortcutSettings}
+            isWindowsDesktop={isWindowsDesktop}
+            data={data}
+            isDesktop={isDesktop}
+            saveState={saveState}
+            message={backupMessage}
+            error={backupError}
+            onExport={exportBackup}
+            onImport={importBackup}
+          />}
         </div>
       </main>
 
       {drawerOpen && <TaskDrawer task={activeTask} defaultStatus={newTaskStatus} onSave={updateTask} onDelete={handleDeleteTask} onClose={() => { setDrawerOpen(false); setActiveTaskId(null) }} />}
       {historyOpen && <TaskHistory tasks={data.tasks} onRestore={handleRestoreTask} onClose={() => setHistoryOpen(false)} />}
-      {backupOpen && <BackupModal data={data} isDesktop={isDesktop} saveState={saveState} message={backupMessage} error={backupError} onClose={() => setBackupOpen(false)} onExport={exportBackup} onImport={importBackup} />}
       {quickCreateOpen && <QuickCreateModal onClose={() => setQuickCreateOpen(false)} onCreate={createQuickTask} />}
       {taskSearchOpen && <TaskSearchModal tasks={data.tasks} onClose={() => setTaskSearchOpen(false)} onOpenTask={openExistingTask} />}
     </div>
-  )
-}
-
-function BackupModal({ data, isDesktop, saveState, message, error, onClose, onExport, onImport }: {
-  data: ReturnType<typeof createEmptyWorkspace>
-  isDesktop: boolean
-  saveState: { status: string; message: string; savedAt: string | null }
-  message: string
-  error: string
-  onClose: () => void
-  onExport: () => void
-  onImport: (file?: File) => Promise<void>
-}) {
-  const [importing, setImporting] = useState(false)
-  return (
-    <Modal title="本机数据与备份" subtitle={isDesktop ? '数据保存在此设备的桌面应用中，与网页端不自动同步。' : '任务与笔记保存在当前浏览器，不会自动同步到其他设备。'} onClose={onClose}>
-      <div className="backup-content">
-        <div className={`backup-status backup-status-${saveState.status}`}><span className="save-dot" /><div><strong>{saveState.message}</strong><small>{saveState.status === 'error' ? '请先导出当前数据，避免数据丢失。' : '建议定期导出备份，妥善保存在安全位置。'}</small></div></div>
-        <div className="backup-actions"><Button variant="primary" icon={<Download size={16} />} onClick={() => void onExport()}>导出全部数据</Button>{isDesktop ? <Button icon={<FileUp size={16} />} disabled={importing} onClick={async () => { setImporting(true); await onImport(); setImporting(false) }}>{importing ? '正在读取备份…' : '导入备份'}</Button> : <label className="button button-secondary backup-import-label"><FileUp size={16} />导入备份<input type="file" accept="application/json,.json" onChange={async (event) => { setImporting(true); await onImport(event.target.files?.[0]); event.target.value = ''; setImporting(false) }} /></label>}</div>
-        {importing && <p className="backup-message">正在读取备份…</p>}{message && <p className="backup-message"><Check size={14} />{message}</p>}{error && <p className="backup-error"><X size={14} />{error}</p>}
-        <div className="backup-details"><span>看板任务 <strong>{data.tasks.length}</strong></span><span>例行规则 <strong>{data.routineRules.length}</strong></span><span>日历排班 <strong>{Object.keys(data.calendarOverrides).length} 天</strong></span></div>
-        <p className="backup-note">备份包含任务、子任务、例行任务完成记录、日历标记和 Index 文档。导入会替换{isDesktop ? '当前桌面应用' : '当前浏览器'}中的全部数据。</p>
-      </div>
-      <footer className="modal-footer"><Button onClick={onClose}>完成</Button></footer>
-    </Modal>
   )
 }
 
