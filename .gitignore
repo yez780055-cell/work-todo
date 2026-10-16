@@ -5,3 +5,5 @@ dist/
 coverage/
 upload/
 .codex/
+src-tauri/target/
+src-tauri/gen/schemas/

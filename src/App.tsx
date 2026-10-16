@@ -1,21 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpenText, BriefcaseBusiness, CalendarDays, Check, CircleHelp, ClipboardList, Download, FileUp, LayoutDashboard, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { BookOpenText, BriefcaseBusiness, CalendarDays, CircleHelp, ClipboardList, LayoutDashboard, Plus, Search, Settings2, Sparkles } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
-import { Button, Modal, SaveIndicator } from './components/common'
+import { SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
 import { QuickCreateModal } from './components/QuickCreateModal'
 import { RoutinePage, createCompletion } from './components/RoutinePage'
 import { TaskBoard, TaskHistory } from './components/TaskBoard'
 import { TaskDrawer } from './components/TaskDrawer'
 import { TaskSearchModal } from './components/TaskSearchModal'
-import { isInCurrentWeek, toDateKey } from './lib/dates'
-import { createEmptyWorkspace, createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
+import { SettingsPage } from './components/SettingsPage'
+import { toDateKey } from './lib/dates'
+import { createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
+import { readDesktopBackup, saveDesktopBackup } from './lib/desktopBackup'
+import { isDesktopApp, isWindowsDesktopApp } from './lib/platform'
+import { GLOBAL_SHORTCUT_ERROR_EVENT, GLOBAL_SHORTCUT_EVENT } from './lib/desktopShortcuts'
+import { ariaShortcut, matchesShortcutEvent, type ShortcutAction } from './lib/shortcuts'
 import { parseWorkspaceBackup } from './lib/storage'
 import { sanitizeRichText } from './lib/richText'
 import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
 import { useWorkspace } from './useWorkspace'
+import { useShortcutSettings } from './useShortcutSettings'
 
-type PageKey = 'tasks' | 'routines' | 'calendar' | 'index'
+type PageKey = 'tasks' | 'routines' | 'calendar' | 'index' | 'settings'
 
 const NAV_ITEMS: Array<{ key: PageKey; label: string; description: string; icon: typeof LayoutDashboard }> = [
   { key: 'tasks', label: '任务看板', description: '推进中的工作事项', icon: LayoutDashboard },
@@ -25,7 +31,10 @@ const NAV_ITEMS: Array<{ key: PageKey; label: string; description: string; icon:
 ]
 
 export default function App() {
-  const { data, setData, ready, saveState } = useWorkspace()
+  const { data, setData, ready, saveState, flushWorkspace, replaceWorkspace } = useWorkspace()
+  const isDesktop = isDesktopApp()
+  const isWindowsDesktop = isWindowsDesktopApp()
+  const shortcutSettings = useShortcutSettings()
   const [activePage, setActivePage] = useState<PageKey>('tasks')
   const [now, setNow] = useState(() => new Date())
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
@@ -34,11 +43,17 @@ export default function App() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('todo')
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [backupOpen, setBackupOpen] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [backupError, setBackupError] = useState('')
   const [resetVersion, setResetVersion] = useState(0)
+  const [shortcutRuntimeError, setShortcutRuntimeError] = useState('')
   const isComposing = useRef(false)
+  const shortcutSettingsRef = useRef(shortcutSettings.settings)
+  const openDialogsRef = useRef(false)
+  shortcutSettingsRef.current = shortcutSettings.settings
+  openDialogsRef.current = drawerOpen || historyOpen || quickCreateOpen || taskSearchOpen
+  const flushWorkspaceRef = useRef(flushWorkspace)
+  flushWorkspaceRef.current = flushWorkspace
   const activeTask = data.tasks.find((task) => task.id === activeTaskId) ?? null
 
   useEffect(() => {
@@ -47,7 +62,55 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const handleOpenBackup = () => setBackupOpen(true)
+    const handleGlobalShortcut = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: ShortcutAction }>).detail?.action
+      if (action !== 'quickCreate' && action !== 'searchTasks') return
+      if (openDialogsRef.current || document.querySelector('[role="dialog"][aria-modal="true"]')) return
+      if (action === 'quickCreate') setQuickCreateOpen(true)
+      else setTaskSearchOpen(true)
+      setShortcutRuntimeError('')
+    }
+    const handleShortcutError = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail
+      setShortcutRuntimeError(typeof message === 'string' ? message : '无法将 Work Todo 窗口置于前台。')
+    }
+    window.addEventListener(GLOBAL_SHORTCUT_EVENT, handleGlobalShortcut)
+    window.addEventListener(GLOBAL_SHORTCUT_ERROR_EVENT, handleShortcutError)
+    return () => {
+      window.removeEventListener(GLOBAL_SHORTCUT_EVENT, handleGlobalShortcut)
+      window.removeEventListener(GLOBAL_SHORTCUT_ERROR_EVENT, handleShortcutError)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isDesktop) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+
+    const attachCloseGuard = async () => {
+      const { registerDesktopCloseGuard } = await import('./lib/desktopCloseGuard')
+      const removeListener = await registerDesktopCloseGuard(async () => {
+        await flushWorkspaceRef.current()
+      }, async () => {
+        const { ask } = await import('@tauri-apps/plugin-dialog')
+        return ask('最新数据保存失败。仍要关闭并放弃尚未保存的更改吗？', {
+          title: 'Work Todo',
+          kind: 'warning',
+        })
+      })
+      if (disposed) removeListener()
+      else unlisten = removeListener
+    }
+
+    void attachCloseGuard().catch((error: unknown) => console.error('无法启用桌面退出保存保护', error))
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [isDesktop])
+
+  useEffect(() => {
+    const handleOpenBackup = () => setActivePage('settings')
     window.addEventListener('open-backup-settings', handleOpenBackup)
     return () => window.removeEventListener('open-backup-settings', handleOpenBackup)
   }, [])
@@ -71,15 +134,21 @@ export default function App() {
       }
 
       const hasOpenDialog = document.querySelector('[role="dialog"][aria-modal="true"]') !== null
-      const commandKey = event.ctrlKey || event.metaKey
-      if (commandKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+      const bindings = shortcutSettingsRef.current.bindings
+      const searchBinding = bindings['window.searchTasks']
+      const quickCreateBinding = bindings['window.quickCreate']
+      const searchMatches = searchBinding.enabled && (
+        matchesShortcutEvent(event, searchBinding.shortcut) ||
+        (searchBinding.shortcut === 'Ctrl+K' && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k')
+      )
+      if (searchMatches) {
         if (hasOpenDialog || isContentEditableTarget(event.target)) return
         event.preventDefault()
         setTaskSearchOpen(true)
         return
       }
 
-      if (event.key.toLowerCase() !== 'n' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      if (!quickCreateBinding.enabled || !matchesShortcutEvent(event, quickCreateBinding.shortcut)) return
       if (hasOpenDialog || isEditableTarget(event.target)) return
       event.preventDefault()
       setQuickCreateOpen(true)
@@ -95,8 +164,9 @@ export default function App() {
     }
   }, [])
 
-  const navItem = NAV_ITEMS.find((item) => item.key === activePage) ?? NAV_ITEMS[0]
-  const completedThisWeek = useMemo(() => data.tasks.filter((task) => task.status === 'done' && isInCurrentWeek(task.completedAt, now)).length, [data.tasks, now])
+  const currentPageLabel = activePage === 'settings'
+    ? '设置'
+    : NAV_ITEMS.find((item) => item.key === activePage)?.label ?? NAV_ITEMS[0].label
   const localDateKey = toDateKey(now)
   const weekday = now.toLocaleDateString('zh-CN', { weekday: 'long' })
   const headerDate = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 · ${weekday}`
@@ -187,29 +257,44 @@ export default function App() {
     indexDocument: { html: sanitizeRichText(html), updatedAt: new Date().toISOString() },
   }))
 
-  const exportBackup = () => {
+  const exportBackup = async () => {
     const backup = { format: 'work-todo-backup', version: 1, exportedAt: new Date().toISOString(), workspace: data }
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `work-todo-backup-${localDateKey}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-    setBackupError('')
-    setBackupMessage('备份文件已生成并下载。')
+    const contents = JSON.stringify(backup, null, 2)
+    const fileName = `work-todo-backup-${localDateKey}.json`
+    try {
+      if (isDesktop) {
+        const saved = await saveDesktopBackup(contents, fileName)
+        if (!saved) return
+        setBackupMessage('备份文件已保存。')
+      } else {
+        const blob = new Blob([contents], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = fileName
+        link.click()
+        URL.revokeObjectURL(url)
+        setBackupMessage('备份文件已生成并下载。')
+      }
+      setBackupError('')
+    } catch (error) {
+      setBackupMessage('')
+      setBackupError(error instanceof Error ? error.message : '无法保存备份文件。')
+    }
   }
 
-  const importBackup = async (file: File | undefined) => {
-    if (!file) return
+  const importBackup = async (file?: File) => {
+    if (!isDesktop && !file) return
     try {
-      const contents = await file.text()
+      const contents = isDesktop ? await readDesktopBackup() : await file!.text()
+      if (contents === null) return
       const workspace = parseWorkspaceBackup(JSON.parse(contents))
-      if (!window.confirm('导入后，当前浏览器中的数据会被备份文件替换。请先确认已导出现有数据。')) return
-      setData(workspace)
+      const storageName = isDesktop ? '当前桌面应用' : '当前浏览器'
+      if (!window.confirm(`导入后，${storageName}中的数据会被备份文件替换。请先确认已导出现有数据。`)) return
+      await replaceWorkspace(workspace)
       setResetVersion((value) => value + 1)
       setBackupError('')
-      setBackupMessage('数据已载入，正在保存到本机。')
+      setBackupMessage(isDesktop ? '数据已导入并保存到桌面应用。' : '数据已导入并保存到本机。')
     } catch (error) {
       setBackupMessage('')
       setBackupError(error instanceof Error ? error.message : '无法读取这个备份文件。')
@@ -227,65 +312,55 @@ export default function App() {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon
             return <button key={item.key} className={`nav-item ${activePage === item.key ? 'nav-item-active' : ''}`} onClick={() => setActivePage(item.key)} aria-current={activePage === item.key ? 'page' : undefined}>
-              <span className="nav-icon"><Icon size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>{item.label}</strong><small>{item.description}</small></span>{item.key === 'tasks' && completedThisWeek > 0 && <span className="nav-count">{completedThisWeek}</span>}
+              <span className="nav-icon"><Icon size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>{item.label}</strong><small>{item.description}</small></span>
             </button>
           })}
+          <button className={`nav-item mobile-settings-nav ${activePage === 'settings' ? 'nav-item-active' : ''}`} type="button" aria-label="设置" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}>
+            <span className="nav-icon"><Settings2 size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>设置</strong></span>
+          </button>
         </nav>
         <div className="sidebar-bottom">
-          <div className="local-storage-card"><div className="storage-card-icon"><Sparkles size={15} /></div><div><strong>本机优先</strong><span>数据仅保存在当前浏览器</span></div></div>
-          <button className="backup-nav" onClick={() => { setBackupMessage(''); setBackupError(''); setBackupOpen(true) }}><Settings2 size={16} />数据备份</button>
+          <div className="local-storage-card"><div className="storage-card-icon"><Sparkles size={15} /></div><div><strong>本机优先</strong><span>数据仅保存在{isDesktop ? '当前桌面应用' : '当前浏览器'}</span></div></div>
+          <button className={`settings-nav ${activePage === 'settings' ? 'settings-nav-active' : ''}`} type="button" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}><Settings2 size={16} />设置</button>
           <div className="sidebar-profile"><span className="profile-avatar">W</span><span><strong>我的工作空间</strong><small>仅自己使用</small></span><CircleHelp size={16} /></div>
         </div>
       </aside>
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{navItem.label}</strong></div>
+          <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{currentPageLabel}</strong></div>
           <div className="topbar-actions">
-            <button className="button button-secondary topbar-action" type="button" aria-label="快速创建任务" aria-keyshortcuts="N" title="快速创建任务 (N)" onClick={() => setQuickCreateOpen(true)}><Plus size={15} /><span className="topbar-action-label">快速新建</span><kbd>N</kbd></button>
-            <button className="button button-secondary topbar-action" type="button" aria-label="搜索任务" aria-keyshortcuts="Control+K Meta+K" title="搜索任务 (Ctrl/⌘ K)" onClick={() => setTaskSearchOpen(true)}><Search size={15} /><span className="topbar-action-label">搜索任务</span><kbd>Ctrl/⌘ K</kbd></button>
+            <button className="button button-secondary topbar-action" type="button" aria-label="快速创建任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.quickCreate'].shortcut)} title="快速创建任务" onClick={() => setQuickCreateOpen(true)}><Plus size={15} /><span className="topbar-action-label">快速新建</span><kbd>{shortcutSettings.settings.bindings['window.quickCreate'].enabled ? shortcutSettings.settings.bindings['window.quickCreate'].shortcut : '未分配'}</kbd></button>
+            <button className="button button-secondary topbar-action" type="button" aria-label="搜索任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.searchTasks'].shortcut)} title="搜索任务" onClick={() => setTaskSearchOpen(true)}><Search size={15} /><span className="topbar-action-label">搜索任务</span><kbd>{shortcutSettings.settings.bindings['window.searchTasks'].enabled ? shortcutSettings.settings.bindings['window.searchTasks'].shortcut : '未分配'}</kbd></button>
           </div>
           <div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div>
         </header>
-        {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setBackupOpen(true)}>打开备份</button></div>}
+        {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setActivePage('settings')}>打开备份设置</button></div>}
+        {shortcutRuntimeError && <div className="shortcut-runtime-error" role="alert">快捷键唤起提示：{shortcutRuntimeError}<button aria-label="关闭快捷键提示" onClick={() => setShortcutRuntimeError('')}>关闭</button></div>}
         <div className={`page-content page-${activePage}`}>
           {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={openExistingTask} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} />}
           {activePage === 'routines' && <RoutinePage rules={data.routineRules} completions={data.routineCompletions} dateKey={localDateKey} calendarOverrides={data.calendarOverrides} onToggleCompletion={toggleRoutine} onSaveRule={saveRoutineRule} onDeleteRule={deleteRoutineRule} onToggleRule={toggleRoutineRule} />}
           {activePage === 'calendar' && <CalendarPage overrides={data.calendarOverrides} onSetDays={setCalendarDays} />}
           {activePage === 'index' && <IndexPage html={data.indexDocument.html} saveState={saveState} onChange={updateIndex} resetVersion={resetVersion} />}
+          {activePage === 'settings' && <SettingsPage
+            shortcutController={shortcutSettings}
+            isWindowsDesktop={isWindowsDesktop}
+            data={data}
+            isDesktop={isDesktop}
+            saveState={saveState}
+            message={backupMessage}
+            error={backupError}
+            onExport={exportBackup}
+            onImport={importBackup}
+          />}
         </div>
       </main>
 
       {drawerOpen && <TaskDrawer task={activeTask} defaultStatus={newTaskStatus} onSave={updateTask} onDelete={handleDeleteTask} onClose={() => { setDrawerOpen(false); setActiveTaskId(null) }} />}
       {historyOpen && <TaskHistory tasks={data.tasks} onRestore={handleRestoreTask} onClose={() => setHistoryOpen(false)} />}
-      {backupOpen && <BackupModal data={data} saveState={saveState} message={backupMessage} error={backupError} onClose={() => setBackupOpen(false)} onExport={exportBackup} onImport={importBackup} />}
       {quickCreateOpen && <QuickCreateModal onClose={() => setQuickCreateOpen(false)} onCreate={createQuickTask} />}
       {taskSearchOpen && <TaskSearchModal tasks={data.tasks} onClose={() => setTaskSearchOpen(false)} onOpenTask={openExistingTask} />}
     </div>
-  )
-}
-
-function BackupModal({ data, saveState, message, error, onClose, onExport, onImport }: {
-  data: ReturnType<typeof createEmptyWorkspace>
-  saveState: { status: string; message: string; savedAt: string | null }
-  message: string
-  error: string
-  onClose: () => void
-  onExport: () => void
-  onImport: (file: File | undefined) => Promise<void>
-}) {
-  const [importing, setImporting] = useState(false)
-  return (
-    <Modal title="本机数据与备份" subtitle="任务与笔记保存在当前浏览器，不会自动同步到其他设备。" onClose={onClose}>
-      <div className="backup-content">
-        <div className={`backup-status backup-status-${saveState.status}`}><span className="save-dot" /><div><strong>{saveState.message}</strong><small>{saveState.status === 'error' ? '请先下载备份文件，避免浏览器数据丢失。' : '建议定期导出备份，妥善保存在安全位置。'}</small></div></div>
-        <div className="backup-actions"><Button variant="primary" icon={<Download size={16} />} onClick={onExport}>导出全部数据</Button><label className="button button-secondary backup-import-label"><FileUp size={16} />导入备份<input type="file" accept="application/json,.json" onChange={async (event) => { setImporting(true); await onImport(event.target.files?.[0]); event.target.value = ''; setImporting(false) }} /></label></div>
-        {importing && <p className="backup-message">正在读取备份…</p>}{message && <p className="backup-message"><Check size={14} />{message}</p>}{error && <p className="backup-error"><X size={14} />{error}</p>}
-        <div className="backup-details"><span>看板任务 <strong>{data.tasks.length}</strong></span><span>例行规则 <strong>{data.routineRules.length}</strong></span><span>日历排班 <strong>{Object.keys(data.calendarOverrides).length} 天</strong></span></div>
-        <p className="backup-note">备份包含任务、子任务、例行任务完成记录、日历标记和 Index 文档。导入会替换当前浏览器中的全部数据。</p>
-      </div>
-      <footer className="modal-footer"><Button onClick={onClose}>完成</Button></footer>
-    </Modal>
   )
 }
 
