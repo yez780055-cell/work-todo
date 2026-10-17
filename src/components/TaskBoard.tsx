@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { CalendarClock, Check, Clock3, History, Plus, Search, Star } from 'lucide-react'
 import { formatDateLabel, getTaskDeadlineDisplay, isInCurrentWeek } from '../lib/dates'
 import { STATUS_LABELS, STATUS_ORDER, type Task, type TaskStatus } from '../lib/model'
+import { compareTasksForBoard } from '../lib/tasks'
 import { Button, EmptyState } from './common'
 import { useCountdownNow } from '../useCountdownClock'
 
@@ -23,12 +24,7 @@ export function TaskBoard({
     const visibleTasks = tasks.filter((task) => task.status !== 'done' || isInCurrentWeek(task.completedAt, now))
     return STATUS_ORDER.map((status) => ({
       status,
-      tasks: visibleTasks.filter((task) => task.status === status).sort((a, b) => {
-        if (a.important !== b.important) return a.important ? -1 : 1
-        const aDue = a.dueDate ? `${a.dueDate} ${a.dueTime}` : '9999'
-        const bDue = b.dueDate ? `${b.dueDate} ${b.dueTime}` : '9999'
-        return aDue.localeCompare(bDue) || b.updatedAt.localeCompare(a.updatedAt)
-      }),
+      tasks: visibleTasks.filter((task) => task.status === status).sort(compareTasksForBoard),
     }))
   }, [tasks, now])
 

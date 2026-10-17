@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlignLeft, Bold, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Heading2, Italic, List, ListOrdered, Plus, Search, Trash2, Underline, X } from 'lucide-react'
 import { createId, type IndexColumn } from '../lib/model'
 import { getSearchSnippets, normalizeSearchText, plainTextFromHtml, sanitizeRichText } from '../lib/richText'
+import { applyRichTextCommand, type RichTextCommand } from '../lib/richTextEditing'
 import { Button, ConfirmDialog } from './common'
 import type { SaveState } from '../useWorkspace'
 
@@ -194,20 +195,21 @@ export function IndexPage({ columns, saveState, onChange, resetVersion }: {
   }
 
   const toolbar = (columnId: string) => [
-    { label: '正文', icon: <AlignLeft size={16} />, command: 'formatBlock', value: '<p>' },
-    { label: '二级标题', icon: <Heading2 size={16} />, command: 'formatBlock', value: '<h2>' },
-    { label: '加粗', icon: <Bold size={16} />, command: 'bold' },
-    { label: '斜体', icon: <Italic size={16} />, command: 'italic' },
-    { label: '下划线', icon: <Underline size={16} />, command: 'underline' },
-    { label: '项目符号列表', icon: <List size={16} />, command: 'insertUnorderedList' },
-    { label: '编号列表', icon: <ListOrdered size={16} />, command: 'insertOrderedList' },
-  ].map((item) => ({
+    { label: '正文', icon: <AlignLeft size={16} />, command: 'paragraph' as const },
+    { label: '二级标题', icon: <Heading2 size={16} />, command: 'heading2' as const },
+    { label: '加粗', icon: <Bold size={16} />, command: 'bold' as const },
+    { label: '斜体', icon: <Italic size={16} />, command: 'italic' as const },
+    { label: '下划线', icon: <Underline size={16} />, command: 'underline' as const },
+    { label: '项目符号列表', icon: <List size={16} />, command: 'unorderedList' as const },
+    { label: '编号列表', icon: <ListOrdered size={16} />, command: 'orderedList' as const },
+  ].map((item: { label: string; icon: React.ReactNode; command: RichTextCommand }) => ({
     ...item,
     run: () => {
       const editor = editorRefs.current.get(columnId)
+      if (!editor) return
       editor?.focus()
-      document.execCommand(item.command, false, item.value)
-      if (editor) updateColumn(columnId, (column) => ({ ...column, html: sanitizeRichText(editor.innerHTML), updatedAt: new Date().toISOString() }))
+      if (!applyRichTextCommand(editor, item.command)) return
+      updateColumn(columnId, (column) => ({ ...column, html: sanitizeRichText(editor.innerHTML), updatedAt: new Date().toISOString() }))
     },
   }))
 

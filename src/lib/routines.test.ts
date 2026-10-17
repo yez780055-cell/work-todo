@@ -32,7 +32,30 @@ describe('weekly routine matrix state and completion records', () => {
     expect(getRoutineMatrixCellState(dailyRule, '2026-10-13', '2026-10-14', {}, false)).toBe('unknown')
     expect(getRoutineMatrixCellState(dailyRule, '2026-10-15', '2026-10-14', {}, false)).toBe('preview')
     expect(getRoutineMatrixCellState(dailyRule, '2026-10-13', '2026-10-14', {}, true)).toBe('complete')
-    expect(getRoutineMatrixCellState(null, '2026-10-13', '2026-10-14', {}, false)).toBe('unavailable')
+    expect(getRoutineMatrixCellState(null, '2026-10-13', '2026-10-14', {}, false)).toBe('unknown')
+  })
+
+  it('does not recalculate missing historical check-ins from current recurrence, enabled state, or calendar overrides', () => {
+    const changedRule: RoutineRule = {
+      ...dailyRule,
+      recurrence: 'weekly',
+      weekdays: [0],
+      enabled: false,
+      runOnRestDays: false,
+      runOnHolidays: false,
+    }
+    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', { '2026-10-13': 'holiday' }, false)).toBe('unknown')
+    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', { '2026-10-13': 'rest' }, false)).toBe('unknown')
+    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', {}, false)).toBe('unknown')
+    expect(getRoutineMatrixCellState(null, '2026-10-13', '2026-10-14', {}, true)).toBe('complete')
+  })
+
+  it('continues applying current rule settings to today and future dates', () => {
+    const disabled = { ...dailyRule, enabled: false }
+    const weekdays = { ...dailyRule, recurrence: 'weekdays' as const, runOnRestDays: false }
+    expect(getRoutineMatrixCellState(disabled, '2026-10-14', '2026-10-14', {}, false)).toBe('unavailable')
+    expect(getRoutineMatrixCellState(weekdays, '2026-10-17', '2026-10-14', { '2026-10-17': 'rest' }, false)).toBe('unavailable')
+    expect(getRoutineMatrixCellState(dailyRule, '2026-10-15', '2026-10-14', {}, false)).toBe('preview')
   })
 
   it('makes the same day and rule check-in idempotent and supports undo without changing other dates', () => {

@@ -6,6 +6,21 @@ const STORE_NAME = 'workspace'
 const ROOT_KEY = 'root'
 const RECURRENCE_TYPES = new Set(['daily', 'weekdays', 'weekly', 'workday'])
 
+function isValidDateKey(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(0)
+  date.setUTCHours(0, 0, 0, 0)
+  date.setUTCFullYear(year, month - 1, day)
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+function isValidTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const match = /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:0\d|1\d|2[0-3]):[0-5]\d)$/.exec(value)
+  return match !== null && isValidDateKey(match[1]) && !Number.isNaN(Date.parse(value))
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (!('indexedDB' in window)) {
@@ -82,7 +97,7 @@ export function parseWorkspaceBackup(value: unknown): WorkspaceData {
       throw new Error('备份中的日历数据格式不正确，原有数据没有被修改')
     }
     if (message.startsWith('Index')) {
-      throw new Error(`${message}，原有数据没有被修改`)
+      throw new Error(message.includes('原有数据没有被修改') ? message : `${message}，原有数据没有被修改`)
     }
     throw new Error('该备份版本无法导入，原有数据没有被修改')
   }
@@ -99,12 +114,21 @@ function validateAndNormalizeWorkspace(value: unknown): { workspace: WorkspaceDa
   ) {
     throw new Error('工作区版本或结构不受支持')
   }
-  if (!isRecord(data.calendarOverrides) || Object.values(data.calendarOverrides).some((type) => !['workday', 'rest', 'holiday'].includes(type))) {
+  const taskIds = data.tasks.map((task) => task.id)
+  const ruleIds = data.routineRules.map((rule) => rule.id)
+  const completionIds = data.routineCompletions.map((completion) => completion.id)
+  if (new Set(taskIds).size !== taskIds.length ||
+    data.tasks.some((task) => new Set(task.subtasks.map((subtask) => subtask.id)).size !== task.subtasks.length) ||
+    new Set(ruleIds).size !== ruleIds.length || new Set(completionIds).size !== completionIds.length) {
+    throw new Error('工作区记录标识重复')
+  }
+  if (!isRecord(data.calendarOverrides) || Object.entries(data.calendarOverrides).some(([date, type]) =>
+    !isValidDateKey(date) || !['workday', 'rest', 'holiday'].includes(type))) {
     throw new Error('日历数据格式不正确')
   }
   const document = data.indexDocument
   if (!isRecord(document) || typeof document.html !== 'string' ||
-    (document.updatedAt !== null && typeof document.updatedAt !== 'string')) {
+    (document.updatedAt !== null && !isValidTimestamp(document.updatedAt))) {
     throw new Error('Index 文档数据格式不正确，原有数据没有被修改')
   }
 
@@ -141,47 +165,48 @@ function isValidIndexColumn(value: unknown): value is IndexColumn {
     typeof value.id === 'string' && value.id.length > 0 &&
     typeof value.title === 'string' &&
     typeof value.html === 'string' &&
-    (value.updatedAt === null || typeof value.updatedAt === 'string') &&
+    (value.updatedAt === null || isValidTimestamp(value.updatedAt)) &&
     typeof value.collapsed === 'boolean'
 }
 
 function isValidTask(value: unknown): boolean {
   if (!isRecord(value)) return false
-  return typeof value.id === 'string' &&
+  return typeof value.id === 'string' && value.id.length > 0 &&
     typeof value.title === 'string' &&
     isTaskStatus(value.status) &&
-    typeof value.dueDate === 'string' &&
-    typeof value.dueTime === 'string' &&
+    (value.dueDate === '' || isValidDateKey(value.dueDate)) &&
+    (value.dueTime === '' || (typeof value.dueTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value.dueTime))) &&
+    (value.dueTime === '' || value.dueDate !== '') &&
     typeof value.important === 'boolean' &&
     typeof value.note === 'string' &&
     Array.isArray(value.subtasks) && value.subtasks.every((subtask) => isRecord(subtask) &&
-      typeof subtask.id === 'string' && typeof subtask.title === 'string' && typeof subtask.done === 'boolean') &&
-    typeof value.createdAt === 'string' &&
-    typeof value.updatedAt === 'string' &&
-    (value.completedAt === null || typeof value.completedAt === 'string') &&
+      typeof subtask.id === 'string' && subtask.id.length > 0 && typeof subtask.title === 'string' && typeof subtask.done === 'boolean') &&
+    isValidTimestamp(value.createdAt) &&
+    isValidTimestamp(value.updatedAt) &&
+    (value.completedAt === null || isValidTimestamp(value.completedAt)) &&
     (value.previousStatus === null || isTaskStatus(value.previousStatus)) &&
     typeof value.autoCompletedBySubtasks === 'boolean'
 }
 
 function isValidRoutineRule(value: unknown): boolean {
   if (!isRecord(value)) return false
-  return typeof value.id === 'string' &&
+  return typeof value.id === 'string' && value.id.length > 0 &&
     typeof value.title === 'string' &&
     typeof value.recurrence === 'string' && RECURRENCE_TYPES.has(value.recurrence) &&
     Array.isArray(value.weekdays) && value.weekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6) &&
     typeof value.runOnRestDays === 'boolean' &&
     typeof value.runOnHolidays === 'boolean' &&
     typeof value.enabled === 'boolean' &&
-    typeof value.order === 'number' &&
-    typeof value.createdAt === 'string' &&
-    typeof value.updatedAt === 'string'
+    typeof value.order === 'number' && Number.isFinite(value.order) &&
+    isValidTimestamp(value.createdAt) &&
+    isValidTimestamp(value.updatedAt)
 }
 
 function isValidRoutineCompletion(value: unknown): boolean {
   return isRecord(value) &&
-    typeof value.id === 'string' &&
+    typeof value.id === 'string' && value.id.length > 0 &&
     typeof value.ruleId === 'string' &&
     typeof value.ruleTitle === 'string' &&
-    typeof value.date === 'string' &&
-    typeof value.completedAt === 'string'
+    isValidDateKey(value.date) &&
+    isValidTimestamp(value.completedAt)
 }
