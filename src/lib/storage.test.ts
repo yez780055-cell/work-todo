@@ -15,6 +15,11 @@ beforeEach(async () => {
 })
 
 describe('workspace storage and backup compatibility', () => {
+  it('creates an empty workspace only when IndexedDB has no root record', async () => {
+    await expect(loadWorkspace()).resolves.toEqual(createEmptyWorkspace())
+    expect(await getStoredWorkspace()).toBeUndefined()
+  })
+
   it('restores moved task status and completion metadata from a reopened IndexedDB connection', async () => {
     const workspace = createEmptyWorkspace()
     const task = createTask('桌面拖动后重启', 'review')
@@ -116,6 +121,37 @@ describe('workspace storage and backup compatibility', () => {
     await putStoredWorkspace(malformed)
     await expect(loadWorkspace()).rejects.toThrow('Index 列数据格式不正确')
     expect(await getStoredWorkspace()).toEqual(malformed)
+  })
+
+  it('rejects a non-object IndexedDB root without changing the original value', async () => {
+    const malformed = 'user data with an unknown format'
+    await putStoredWorkspace(malformed)
+    await expect(loadWorkspace()).rejects.toThrow('工作区数据格式不正确')
+    expect(await getStoredWorkspace()).toBe(malformed)
+  })
+
+  it('rejects an unsupported IndexedDB schema version without changing the original workspace', async () => {
+    const unsupported = { ...createEmptyWorkspace(), schemaVersion: 2 }
+    await putStoredWorkspace(unsupported)
+    await expect(loadWorkspace()).rejects.toThrow('工作区版本或结构不受支持')
+    expect(await getStoredWorkspace()).toEqual(unsupported)
+  })
+
+  it('rejects a root without a schema version without changing the original record', async () => {
+    const malformed = { ...createEmptyWorkspace() } as Record<string, unknown>
+    delete malformed.schemaVersion
+    await putStoredWorkspace(malformed)
+    await expect(loadWorkspace()).rejects.toThrow('工作区版本或结构不受支持')
+    expect(await getStoredWorkspace()).toEqual(malformed)
+  })
+
+  it('rejects divergent Index compatibility data instead of overwriting either copy', async () => {
+    const divergent = createEmptyWorkspace()
+    divergent.indexDocument = { html: '<p>不可被覆盖的旧副本</p>', updatedAt: null }
+    divergent.indexColumns[0] = { ...divergent.indexColumns[0], html: '<p>另一份内容</p>' }
+    await putStoredWorkspace(divergent)
+    await expect(loadWorkspace()).rejects.toThrow('Index 首列与兼容文档数据不一致')
+    expect(await getStoredWorkspace()).toEqual(divergent)
   })
 
   it('normalizes old backups and round trips ordered, collapsed Index columns', () => {

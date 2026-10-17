@@ -39,8 +39,7 @@ export async function loadWorkspace(): Promise<WorkspaceData> {
     }
   })
   if (stored === undefined) return createEmptyWorkspace()
-  if (!isRecord(stored) || stored.schemaVersion !== 1) return createEmptyWorkspace()
-  const { workspace, migrated } = normalizeIndexData(stored)
+  const { workspace, migrated } = validateAndNormalizeWorkspace(stored)
   if (migrated) await saveWorkspace(workspace)
   return workspace
 }
@@ -75,32 +74,34 @@ export function parseWorkspaceBackup(value: unknown): WorkspaceData {
     }
     candidate = wrapper.workspace
   }
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    throw new Error('备份文件格式不正确')
+  try {
+    return validateAndNormalizeWorkspace(candidate).workspace
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Workspace 数据格式不正确'
+    if (message.startsWith('日历数据格式不正确')) {
+      throw new Error('备份中的日历数据格式不正确，原有数据没有被修改')
+    }
+    if (message.startsWith('Index')) {
+      throw new Error(`${message}，原有数据没有被修改`)
+    }
+    throw new Error('该备份版本无法导入，原有数据没有被修改')
   }
-  const data = candidate as Partial<WorkspaceData>
+}
+
+function validateAndNormalizeWorkspace(value: unknown): { workspace: WorkspaceData; migrated: boolean } {
+  if (!isRecord(value)) throw new Error('工作区数据格式不正确')
+  const data = value as Partial<WorkspaceData>
   if (
     data.schemaVersion !== 1 ||
     !Array.isArray(data.tasks) || !data.tasks.every(isValidTask) ||
     !Array.isArray(data.routineRules) || !data.routineRules.every(isValidRoutineRule) ||
-    !Array.isArray(data.routineCompletions) || !data.routineCompletions.every(isValidRoutineCompletion) ||
-    !data.calendarOverrides ||
-    typeof data.calendarOverrides !== 'object' || Array.isArray(data.calendarOverrides) ||
-    !data.indexDocument ||
-    typeof data.indexDocument !== 'object' || Array.isArray(data.indexDocument) ||
-    typeof data.indexDocument.html !== 'string' ||
-    (data.indexDocument.updatedAt !== null && typeof data.indexDocument.updatedAt !== 'string')
+    !Array.isArray(data.routineCompletions) || !data.routineCompletions.every(isValidRoutineCompletion)
   ) {
-    throw new Error('该备份版本无法导入，原有数据没有被修改')
+    throw new Error('工作区版本或结构不受支持')
   }
-  if (Object.values(data.calendarOverrides).some((type) => !['workday', 'rest', 'holiday'].includes(type))) {
-    throw new Error('备份中的日历数据格式不正确，原有数据没有被修改')
+  if (!isRecord(data.calendarOverrides) || Object.values(data.calendarOverrides).some((type) => !['workday', 'rest', 'holiday'].includes(type))) {
+    throw new Error('日历数据格式不正确')
   }
-  return normalizeIndexData(data).workspace
-}
-
-function normalizeIndexData(value: Record<string, unknown> | Partial<WorkspaceData>): { workspace: WorkspaceData; migrated: boolean } {
-  const data = value as Partial<WorkspaceData>
   const document = data.indexDocument
   if (!isRecord(document) || typeof document.html !== 'string' ||
     (document.updatedAt !== null && typeof document.updatedAt !== 'string')) {
@@ -123,10 +124,9 @@ function normalizeIndexData(value: Record<string, unknown> | Partial<WorkspaceDa
 
   const firstColumn = columns[0]
   const mirrorChanged = document.html !== firstColumn.html || document.updatedAt !== firstColumn.updatedAt
-  if (mirrorChanged) migrated = true
+  if (mirrorChanged) throw new Error('Index 首列与兼容文档数据不一致')
   const workspace = {
     ...data,
-    indexDocument: { html: firstColumn.html, updatedAt: firstColumn.updatedAt },
     indexColumns: columns,
   } as WorkspaceData
   return { workspace, migrated }

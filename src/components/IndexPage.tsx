@@ -1,16 +1,52 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlignLeft, Bold, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Heading2, Italic, List, ListOrdered, Plus, Search, Trash2, Underline, X } from 'lucide-react'
 import { createId, type IndexColumn } from '../lib/model'
-import { getSearchSnippets, plainTextFromHtml, sanitizeRichText } from '../lib/richText'
+import { getSearchSnippets, normalizeSearchText, plainTextFromHtml, sanitizeRichText } from '../lib/richText'
 import { Button, ConfirmDialog } from './common'
 import type { SaveState } from '../useWorkspace'
 
 interface SearchMatch {
   columnId: string
   columnTitle: string
-  index: number
+  start: number
+  end: number
   text: string
-  query: string
+}
+
+type TextNodePoint = { node: Text; offset: number }
+type TextPoint = TextNodePoint | null
+
+function collectEditorText(root: HTMLElement): { text: string; points: TextPoint[] } {
+  const blockTags = new Set(['P', 'H2', 'H3', 'LI', 'BLOCKQUOTE'])
+  let text = ''
+  const points: TextPoint[] = []
+  const appendBreak = () => {
+    if (text && !text.endsWith('\n')) {
+      text += '\n'
+      points.push(null)
+    }
+  }
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const textNode = node as Text
+      const content = textNode.textContent ?? ''
+      text += content
+      for (let offset = 0; offset < content.length; offset += 1) points.push({ node: textNode, offset })
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+    const element = node as HTMLElement
+    if (element.tagName === 'BR') {
+      appendBreak()
+      return
+    }
+    const isBlock = blockTags.has(element.tagName)
+    if (isBlock) appendBreak()
+    Array.from(element.childNodes).forEach(visit)
+    if (isBlock) appendBreak()
+  }
+  Array.from(root.childNodes).forEach(visit)
+  return { text, points }
 }
 
 export function IndexPage({ columns, saveState, onChange, resetVersion }: {
@@ -34,7 +70,6 @@ export function IndexPage({ columns, saveState, onChange, resetVersion }: {
       ...match,
       columnId: column.id,
       columnTitle: column.title,
-      query: term,
     }))).slice(0, 12)
   }, [columns, query])
 
@@ -125,45 +160,27 @@ export function IndexPage({ columns, saveState, onChange, resetVersion }: {
   const jumpToMatch = (match: SearchMatch) => {
     const root = editorRefs.current.get(match.columnId)
     if (!root) return
-    const content = root.textContent ?? ''
-    const needle = match.query.toLocaleLowerCase()
-    let cursor = 0
-    let start = -1
-    for (let i = 0; i <= match.index; i += 1) {
-      start = content.toLocaleLowerCase().indexOf(needle, cursor)
-      if (start < 0) return
-      cursor = start + Math.max(1, needle.length)
+    const source = collectEditorText(root)
+    const normalized = normalizeSearchText(source.text)
+    const sourceStart = normalized.sourceRanges[match.start]?.start
+    const sourceEnd = normalized.sourceRanges[match.end - 1]?.end
+    if (sourceStart === undefined || sourceEnd === undefined) return
+    let startPoint: TextNodePoint | null = null
+    for (let offset = sourceStart; offset < source.points.length && !startPoint; offset += 1) {
+      startPoint = source.points[offset]
     }
-    const end = start + match.query.length
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    let offset = 0
-    let startNode: Text | null = null
-    let endNode: Text | null = null
-    let startOffset = 0
-    let endOffset = 0
-    while (walker.nextNode()) {
-      const node = walker.currentNode as Text
-      const nodeStart = offset
-      const nodeEnd = offset + (node.textContent ?? '').length
-      if (!startNode && start >= nodeStart && start < nodeEnd) {
-        startNode = node
-        startOffset = start - nodeStart
-      }
-      if (end > nodeStart && end <= nodeEnd) {
-        endNode = node
-        endOffset = end - nodeStart
-        break
-      }
-      offset = nodeEnd
+    let endPoint: TextNodePoint | null = null
+    for (let offset = sourceEnd - 1; offset >= 0 && !endPoint; offset -= 1) {
+      endPoint = source.points[offset]
     }
-    if (!startNode || !endNode) return
+    if (!startPoint || !endPoint) return
     const range = document.createRange()
-    range.setStart(startNode, startOffset)
-    range.setEnd(endNode, endOffset)
+    range.setStart(startPoint.node, startPoint.offset)
+    range.setEnd(endPoint.node, endPoint.offset + 1)
     const selection = window.getSelection()
     selection?.removeAllRanges()
     selection?.addRange(range)
-    startNode.parentElement?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    startPoint.node.parentElement?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
   }
 
   const selectMatch = (match: SearchMatch) => {
@@ -205,7 +222,7 @@ export function IndexPage({ columns, saveState, onChange, resetVersion }: {
         </div>
       </div>
       {query && <div className="search-results" aria-label="Index 搜索结果">
-        {matches.length === 0 ? <p>没有找到匹配内容。</p> : matches.map((item, index) => <button type="button" key={`${item.columnId}-${item.index}-${index}`} onClick={() => selectMatch(item)}><span>{index + 1}</span><strong>{item.columnTitle}</strong>{item.text}</button>)}
+        {matches.length === 0 ? <p>没有找到匹配内容。</p> : matches.map((item, index) => <button type="button" key={`${item.columnId}-${item.start}-${item.end}`} onClick={() => selectMatch(item)}><span>{index + 1}</span><strong>{item.columnTitle}</strong>{item.text}</button>)}
       </div>}
       <div className="index-column-grid">
         {columns.map((column, index) => {
