@@ -109,7 +109,7 @@ export function ShortcutSettingsPage({ controller, isWindowsDesktop }: {
       </div>
     </section>)}
 
-    {edited && currentDraft && <Modal title={`设置快捷键 · ${edited.label}`} subtitle={edited.scope === 'global' ? 'Windows 全局快捷键必须包含 Ctrl 和至少另一个修饰键。' : '仅接受字母、数字或 F1–F12，可组合修饰键。'} onClose={closeEditor}>
+    {edited && currentDraft && <Modal title={`设置快捷键 · ${edited.label}`} subtitle={edited.scope === 'global' ? 'Windows 全局快捷键必须包含 Ctrl 和至少另一个修饰键。' : '仅接受字母、数字或 F1–F12，可组合修饰键。'} onClose={closeEditor} closeOnEscape={!capturing}>
       <div className="shortcut-editor-content">
         <label className="shortcut-enabled-toggle"><input type="checkbox" checked={currentDraft.enabled} onChange={(event) => setDraft({ ...draft!, bindings: { ...draft!.bindings, [edited.id]: { ...currentDraft, enabled: event.target.checked } } })} />启用此快捷键</label>
         <div className="shortcut-capture-row"><div><span>按键组合</span><small>按“录入组合键”后，同时按下想使用的修饰键和字母或功能键。</small></div><kbd>{currentDraft.shortcut ? formatShortcut(currentDraft.shortcut) : '未分配'}</kbd><Button autoFocus={false} aria-label={capturing ? '正在录入快捷键，按 Esc 取消录入' : '录入组合键'} onClick={() => { setCapturing(true); setFeedback('请按下快捷键；按 Esc 取消录入，Backspace 清除。') }}>{capturing ? '请按键…' : '录入组合键'}</Button></div>

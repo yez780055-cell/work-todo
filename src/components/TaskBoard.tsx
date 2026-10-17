@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { CalendarClock, Check, Clock3, History, Plus, Search, Star } from 'lucide-react'
 import { formatDateLabel, getTaskDeadlineDisplay, isInCurrentWeek } from '../lib/dates'
 import { STATUS_LABELS, STATUS_ORDER, type Task, type TaskStatus } from '../lib/model'
 import { compareTasksForBoard } from '../lib/tasks'
 import { Button, EmptyState } from './common'
 import { useCountdownNow } from '../useCountdownClock'
+import { useDialogFocus } from './useDialogFocus'
 
 export function TaskBoard({
   tasks, now, onOpenTask, onCreateTask, onMoveTask, onToggleSubtask, onOpenHistory, onOpenSearch,
@@ -159,12 +160,15 @@ export function TaskHistory({ tasks, onRestore, onClose }: {
   onClose: () => void
 }) {
   const [query, setQuery] = useState('')
+  const dialogRef = useRef<HTMLElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useDialogFocus(dialogRef, searchInputRef, onClose)
   const completed = tasks.filter((task) => task.status === 'done').filter((task) => task.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())).sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <aside className="side-drawer history-drawer" role="dialog" aria-modal="true" aria-label="已完成历史">
-        <header className="drawer-header"><div><span className="eyebrow">TASK ARCHIVE</span><h2>已完成历史</h2><p>跨周隐藏的任务仍保留在这里，可随时恢复。</p></div><button className="icon-button close-button" onClick={onClose} aria-label="关闭">×</button></header>
-        <label className="search-field"><span>搜索任务</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入任务标题" /></label>
+      <aside className="side-drawer history-drawer" role="dialog" aria-modal="true" aria-labelledby="task-history-title" tabIndex={-1} ref={dialogRef}>
+        <header className="drawer-header"><div><span className="eyebrow">TASK ARCHIVE</span><h2 id="task-history-title">已完成历史</h2><p>跨周隐藏的任务仍保留在这里，可随时恢复。</p></div><button type="button" className="icon-button close-button" onClick={onClose} aria-label="关闭">×</button></header>
+        <label className="search-field"><span>搜索任务</span><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入任务标题" /></label>
         <div className="history-list">
           {completed.length === 0 ? <EmptyState icon={<History size={22} />} title="没有找到已完成任务" detail={query ? '换个关键词试试' : '完成的任务会在这里归档'} /> : completed.map((task) => (
             <article className="history-row" key={task.id}>

@@ -3,7 +3,7 @@ import { CalendarDays, Check, ChevronLeft, ChevronRight, Circle, ListChecks, Plu
 import { dateFromKey, getWeekDateKeys, getWeekStartKey, routineRunsOnDate, shiftDateKey } from '../lib/dates'
 import { createId, createRoutineRule, WEEKDAY_LABELS, type CalendarDayType, type RecurrenceType, type RoutineCompletion, type RoutineRule } from '../lib/model'
 import { getRoutineMatrixCellState } from '../lib/routines'
-import { Button, EmptyState, Modal } from './common'
+import { Button, ConfirmDialog, EmptyState, Modal } from './common'
 
 const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
   daily: '每天',
@@ -184,17 +184,25 @@ function RoutineManager({ rules, onClose, onAdd, onEdit, onDelete, onToggle }: {
   onToggle: (rule: RoutineRule) => void
 }) {
   const ordered = [...rules].sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt))
+  const [pendingDelete, setPendingDelete] = useState<RoutineRule | null>(null)
   return (
     <Modal title="规则管理" subtitle="调整重复方式和执行日期；完成记录会继续保留。" onClose={onClose} wide>
       <div className="manager-list">
         {ordered.length === 0 ? <EmptyState icon={<Settings2 size={22} />} title="还没有规则" detail="添加一条你想每天或每周重复的工作事项。" /> : ordered.map((rule) => (
           <article className={`manager-rule ${rule.enabled ? '' : 'manager-rule-disabled'}`} key={rule.id}>
             <div className="manager-rule-info"><span className="manager-rule-icon"><Check size={15} /></span><div><strong>{rule.title}</strong><span>{RECURRENCE_LABELS[rule.recurrence]}{rule.recurrence === 'weekly' ? ` · ${rule.weekdays.map((day) => WEEKDAY_LABELS[day]).join('、')}` : ''}</span></div></div>
-            <div className="manager-rule-actions"><button onClick={() => onToggle(rule)} className={`switch ${rule.enabled ? 'switch-on' : ''}`} role="switch" aria-checked={rule.enabled} aria-label={rule.enabled ? '暂停规则' : '启用规则'}><span /></button><button className="text-action" onClick={() => onEdit(rule)}>编辑</button><button className="delete-subtask" onClick={() => { if (window.confirm(`删除“${rule.title}”？已保存的完成记录会保留。`)) onDelete(rule) }} aria-label="删除规则"><Trash2 size={15} /></button></div>
+            <div className="manager-rule-actions"><button type="button" onClick={() => onToggle(rule)} className={`switch ${rule.enabled ? 'switch-on' : ''}`} role="switch" aria-checked={rule.enabled} aria-label={rule.enabled ? '暂停规则' : '启用规则'}><span /></button><button type="button" className="text-action" onClick={() => onEdit(rule)}>编辑</button><button type="button" className="delete-subtask" onClick={() => setPendingDelete(rule)} aria-label={`删除规则：${rule.title}`}><Trash2 size={15} /></button></div>
           </article>
         ))}
       </div>
       <footer className="modal-footer"><Button onClick={onClose}>关闭</Button><Button variant="primary" onClick={onAdd} icon={<Plus size={16} />}>新建规则</Button></footer>
+      {pendingDelete && <ConfirmDialog
+        title="删除例行规则？"
+        message={`“${pendingDelete.title}”规则会被删除；已保存的完成记录会保留。此操作无法撤销。`}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => { onDelete(pendingDelete); setPendingDelete(null) }}
+        confirmLabel="删除规则"
+      />}
     </Modal>
   )
 }

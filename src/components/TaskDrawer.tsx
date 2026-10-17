@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CalendarClock, Check, Plus, Star, Trash2 } from 'lucide-react'
 import { getTaskDeadlineDisplay } from '../lib/dates'
 import { createId, createTask, STATUS_LABELS, STATUS_ORDER, type Subtask, type Task, type TaskStatus } from '../lib/model'
 import { setSubtaskCompletion, setTaskStatus } from '../lib/tasks'
 import { useCountdownNow } from '../useCountdownClock'
-import { Button } from './common'
+import { Button, ConfirmDialog } from './common'
+import { useDialogFocus } from './useDialogFocus'
 
 export function TaskDrawer({ task, defaultStatus, now, onSave, onDelete, onClose }: {
   task: Task | null
@@ -17,6 +18,10 @@ export function TaskDrawer({ task, defaultStatus, now, onSave, onDelete, onClose
   const countdownNow = useCountdownNow(now)
   const [draft, setDraft] = useState<Task>(() => task ? { ...task, subtasks: [...task.subtasks] } : createTask('', defaultStatus))
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [pendingSubtaskDelete, setPendingSubtaskDelete] = useState<Subtask | null>(null)
+  const dialogRef = useRef<HTMLElement>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  useDialogFocus(dialogRef, titleInputRef, onClose)
 
   useEffect(() => {
     if (task) setDraft({ ...task, subtasks: [...task.subtasks] })
@@ -51,18 +56,23 @@ export function TaskDrawer({ task, defaultStatus, now, onSave, onDelete, onClose
 
   const toggleSubtask = (id: string, done: boolean) => commit(setSubtaskCompletion(draft, id, done))
   const deleteSubtask = (id: string) => commit({ ...draft, subtasks: draft.subtasks.filter((item) => item.id !== id), updatedAt: new Date().toISOString() })
+  const confirmDeleteSubtask = () => {
+    if (!pendingSubtaskDelete) return
+    deleteSubtask(pendingSubtaskDelete.id)
+    setPendingSubtaskDelete(null)
+  }
   const deadline = draft.status === 'done' ? { text: '', tone: '' as const } : getTaskDeadlineDisplay(draft.dueDate, draft.dueTime, countdownNow)
 
   return (
     <div className="modal-backdrop drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && task) onClose() }}>
-      <aside className="side-drawer task-drawer" role="dialog" aria-modal="true" aria-label={task ? '任务详情' : '新建任务'}>
+      <aside className="side-drawer task-drawer" role="dialog" aria-modal="true" aria-labelledby="task-drawer-title" tabIndex={-1} ref={dialogRef}>
         <header className="drawer-header">
-          <div><span className="eyebrow">WORK ITEM</span><h2>{task ? '任务详情' : '新建任务'}</h2><p>{task ? `创建于 ${new Date(task.createdAt).toLocaleDateString('zh-CN')}` : '先写下这件要推进的事。'}</p></div>
+          <div><span className="eyebrow">WORK ITEM</span><h2 id="task-drawer-title">{task ? '任务详情' : '新建任务'}</h2><p>{task ? `创建于 ${new Date(task.createdAt).toLocaleDateString('zh-CN')}` : '先写下这件要推进的事。'}</p></div>
           <button className="icon-button close-button" onClick={onClose} aria-label="关闭">×</button>
         </header>
         <div className="drawer-form">
           <label className="field-label">任务标题 <em>必填</em>
-            <input className="title-input" value={draft.title} onChange={(event) => changeField('title', event.target.value)} placeholder="例如：整理本周产品数据" autoFocus />
+            <input ref={titleInputRef} className="title-input" value={draft.title} onChange={(event) => changeField('title', event.target.value)} placeholder="例如：整理本周产品数据" autoFocus />
           </label>
 
           <div className="field-grid">
@@ -93,7 +103,7 @@ export function TaskDrawer({ task, defaultStatus, now, onSave, onDelete, onClose
               <div className={`subtask-edit-row ${item.done ? 'subtask-is-done' : ''}`} key={item.id}>
                 <label className="check-label"><input type="checkbox" checked={item.done} onChange={(event) => toggleSubtask(item.id, event.target.checked)} /><span className="checkmark"><Check size={13} /></span></label>
                 <input value={item.title} onChange={(event) => updateSubtaskTitle(item.id, event.target.value)} placeholder="子任务内容" aria-label="子任务内容" />
-                <button className="delete-subtask" aria-label="删除子任务" onClick={() => deleteSubtask(item.id)}><Trash2 size={15} /></button>
+                <button type="button" className="delete-subtask" aria-label={`删除子任务：${item.title || '未命名子任务'}`} onClick={() => setPendingSubtaskDelete(item)}><Trash2 size={15} /></button>
               </div>
             ))}
             <div className="add-subtask-row"><input value={newSubtaskTitle} onChange={(event) => setNewSubtaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addSubtask() } }} placeholder="添加一个子任务" /><button aria-label="添加子任务" onClick={addSubtask}><Plus size={16} /></button></div>
@@ -109,6 +119,13 @@ export function TaskDrawer({ task, defaultStatus, now, onSave, onDelete, onClose
           <Button variant="primary" onClick={onClose} disabled={!draft.title.trim()}>完成</Button>
         </footer>
       </aside>
+      {pendingSubtaskDelete && <ConfirmDialog
+        title="删除子任务？"
+        message={`“${pendingSubtaskDelete.title || '未命名子任务'}”将从当前任务中删除，且无法撤销。`}
+        onClose={() => setPendingSubtaskDelete(null)}
+        onConfirm={confirmDeleteSubtask}
+        confirmLabel="删除子任务"
+      />}
     </div>
   )
 }

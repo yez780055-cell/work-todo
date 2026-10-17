@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { useDialogFocus } from './useDialogFocus'
 
@@ -16,22 +16,28 @@ export function IconButton({ label, className = '', ...props }: ButtonHTMLAttrib
   return <button className={`icon-button ${className}`} aria-label={label} title={label} {...props} />
 }
 
-export function Modal({ title, subtitle, onClose, children, wide = false }: {
+export function Modal({ title, subtitle, onClose, children, wide = false, closeOnEscape = true }: {
   title: string
   subtitle?: string
   onClose: () => void
   children: ReactNode
   wide?: boolean
+  closeOnEscape?: boolean
 }) {
+  const dialogRef = useRef<HTMLElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+  useDialogFocus(dialogRef, closeRef, closeOnEscape ? onClose : undefined)
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={dialogRef}>
         <header className="modal-header">
           <div>
-            <h2>{title}</h2>
+            <h2 id={titleId}>{title}</h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
-          <button className="icon-button close-button" aria-label="关闭" onClick={onClose}><X size={18} /></button>
+          <button ref={closeRef} type="button" className="icon-button close-button" aria-label="关闭" onClick={onClose}><X size={18} /></button>
         </header>
         {children}
       </section>
@@ -39,34 +45,33 @@ export function Modal({ title, subtitle, onClose, children, wide = false }: {
   )
 }
 
-export function ConfirmDialog({ title, message, onClose, onConfirm, confirmLabel = '确认删除' }: {
+export function ConfirmDialog({ title, message, onClose, onConfirm, confirmLabel = '确认删除', cancelLabel = '取消' }: {
   title: string
   message: string
   onClose: () => void
   onConfirm: () => void
   confirmLabel?: string
+  cancelLabel?: string
 }) {
   const dialogRef = useRef<HTMLElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
-  useDialogFocus(dialogRef, cancelRef)
+  const resolved = useRef(false)
+  const cancel = () => {
+    if (resolved.current) return
+    resolved.current = true
+    onClose()
+  }
+  const confirm = () => {
+    if (resolved.current) return
+    resolved.current = true
+    onConfirm()
+  }
+  useDialogFocus(dialogRef, cancelRef, cancel)
 
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      onClose()
-    }
-    dialog.addEventListener('keydown', closeOnEscape)
-    return () => dialog.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
-
-  return <div className="modal-backdrop confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <section className="modal confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" tabIndex={-1} ref={dialogRef}>
-      <header className="confirm-dialog-heading"><span className="confirm-dialog-icon"><AlertTriangle size={18} /></span><div><h2 id="confirm-dialog-title">{title}</h2><p id="confirm-dialog-message">{message}</p></div><button type="button" className="icon-button close-button" aria-label="关闭确认框" onClick={onClose}><X size={17} /></button></header>
-      <footer className="modal-footer"><button ref={cancelRef} type="button" className="button button-secondary confirm-cancel" aria-label="取消删除" onClick={onClose}>取消</button><Button variant="danger" onClick={onConfirm}>{confirmLabel}</Button></footer>
+  return <div className="modal-backdrop confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) cancel() }}>
+    <section className="modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" tabIndex={-1} ref={dialogRef}>
+      <header className="confirm-dialog-heading"><span className="confirm-dialog-icon"><AlertTriangle size={18} /></span><div><h2 id="confirm-dialog-title">{title}</h2><p id="confirm-dialog-message">{message}</p></div><button type="button" className="icon-button close-button" aria-label="关闭确认框" onClick={cancel}><X size={17} /></button></header>
+      <footer className="modal-footer"><button ref={cancelRef} type="button" className="button button-secondary confirm-cancel" aria-label={cancelLabel} onClick={cancel}>{cancelLabel}</button><Button type="button" variant="danger" onClick={confirm}>{confirmLabel}</Button></footer>
     </section>
   </div>
 }
