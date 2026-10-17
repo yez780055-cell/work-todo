@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, BriefcaseBusiness, CalendarDays, Circle, RotateCcw, Sun, Umbrella } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BriefcaseBusiness, CalendarDays, RotateCcw, Sun, Umbrella } from 'lucide-react'
 import { dateFromKey, getCalendarMonthGrid, getCalendarDayType, getMonthLabel, isSameMonth, toDateKey } from '../lib/dates'
 import { WEEKDAY_LABELS, type CalendarDayType } from '../lib/model'
 
@@ -73,7 +73,6 @@ export function CalendarPage({ overrides, onSetDays }: {
             const date = dateFromKey(dateKey)
             const dayType = getCalendarDayType(dateKey, overrides)
             const isSelected = selected.includes(dateKey)
-            const hasOverride = Boolean(overrides[dateKey] && overrides[dateKey] !== 'workday')
             return <button
               type="button"
               key={dateKey}
@@ -83,9 +82,8 @@ export function CalendarPage({ overrides, onSetDays }: {
               aria-label={`${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日，${TYPE_LABELS[dayType]}${isSelected ? '，已选择' : ''}`}
             >
               <span className="calendar-day-number">{date.getDate()}</span>
-              {hasOverride && <span className={`calendar-type-label type-label-${dayType}`}>{TYPE_LABELS[dayType]}</span>}
               {dateKey === currentKey && <span className="today-label">今天</span>}
-              <span className="day-state-dot"><Circle size={7} fill="currentColor" /></span>
+              {dayType !== 'workday' && <span className={`calendar-type-label type-label-${dayType}`} title={TYPE_LABELS[dayType]}>{TYPE_LABELS[dayType]}</span>}
             </button>
           })}
         </div>

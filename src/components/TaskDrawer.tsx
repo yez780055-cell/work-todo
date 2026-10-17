@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react'
 import { CalendarClock, Check, Plus, Star, Trash2 } from 'lucide-react'
+import { getTaskDeadlineDisplay } from '../lib/dates'
 import { createId, createTask, STATUS_LABELS, STATUS_ORDER, type Subtask, type Task, type TaskStatus } from '../lib/model'
 import { setSubtaskCompletion, setTaskStatus } from '../lib/tasks'
+import { useCountdownNow } from '../useCountdownClock'
 import { Button } from './common'
 
-export function TaskDrawer({ task, defaultStatus, onSave, onDelete, onClose }: {
+export function TaskDrawer({ task, defaultStatus, now, onSave, onDelete, onClose }: {
   task: Task | null
   defaultStatus: TaskStatus
+  now: Date
   onSave: (task: Task) => void
   onDelete: (task: Task) => void
   onClose: () => void
 }) {
+  const countdownNow = useCountdownNow(now)
   const [draft, setDraft] = useState<Task>(() => task ? { ...task, subtasks: [...task.subtasks] } : createTask('', defaultStatus))
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
 
@@ -47,6 +51,7 @@ export function TaskDrawer({ task, defaultStatus, onSave, onDelete, onClose }: {
 
   const toggleSubtask = (id: string, done: boolean) => commit(setSubtaskCompletion(draft, id, done))
   const deleteSubtask = (id: string) => commit({ ...draft, subtasks: draft.subtasks.filter((item) => item.id !== id), updatedAt: new Date().toISOString() })
+  const deadline = draft.status === 'done' ? { text: '', tone: '' as const } : getTaskDeadlineDisplay(draft.dueDate, draft.dueTime, countdownNow)
 
   return (
     <div className="modal-backdrop drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && task) onClose() }}>
@@ -80,6 +85,7 @@ export function TaskDrawer({ task, defaultStatus, onSave, onDelete, onClose }: {
               <label><span>具体时间 <i>可选</i></span><input type="time" value={draft.dueTime} onChange={(event) => changeField('dueTime', event.target.value)} disabled={!draft.dueDate} /></label>
             </div>
           </fieldset>
+          {deadline.text && <div className={`deadline-countdown countdown-${deadline.tone}`}><CalendarClock size={14} /><span>{deadline.tone === 'overdue' ? '已逾期' : '剩余时间'}</span><strong>{deadline.tone === 'overdue' ? '' : deadline.text}</strong></div>}
 
           <section className="subtask-section">
             <div className="section-heading"><div><span className="eyebrow">CHECKLIST</span><h3>子任务 <span>{draft.subtasks.filter((item) => item.done).length}/{draft.subtasks.length}</span></h3></div><p>全部勾选时自动完成主任务</p></div>

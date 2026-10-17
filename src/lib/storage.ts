@@ -1,4 +1,4 @@
-import { createEmptyWorkspace, isTaskStatus, type WorkspaceData } from './model'
+import { createEmptyWorkspace, isTaskStatus, type IndexColumn, type WorkspaceData } from './model'
 
 const DB_NAME = 'work-todo-local'
 const DB_VERSION = 1
@@ -25,17 +25,24 @@ function openDatabase(): Promise<IDBDatabase> {
 
 export async function loadWorkspace(): Promise<WorkspaceData> {
   const database = await openDatabase()
-  return new Promise((resolve, reject) => {
+  const stored = await new Promise<unknown>((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, 'readonly')
     const request = transaction.objectStore(STORE_NAME).get(ROOT_KEY)
     request.onsuccess = () => {
-      const value = request.result as WorkspaceData | undefined
-      resolve(value?.schemaVersion === 1 ? value : createEmptyWorkspace())
+      resolve(request.result)
     }
     request.onerror = () => reject(request.error ?? new Error('读取本地数据失败'))
     transaction.oncomplete = () => database.close()
-    transaction.onerror = () => reject(transaction.error ?? new Error('读取本地数据失败'))
+    transaction.onerror = () => {
+      database.close()
+      reject(transaction.error ?? new Error('读取本地数据失败'))
+    }
   })
+  if (stored === undefined) return createEmptyWorkspace()
+  if (!isRecord(stored) || stored.schemaVersion !== 1) return createEmptyWorkspace()
+  const { workspace, migrated } = normalizeIndexData(stored)
+  if (migrated) await saveWorkspace(workspace)
+  return workspace
 }
 
 export async function saveWorkspace(data: WorkspaceData): Promise<void> {
@@ -89,11 +96,53 @@ export function parseWorkspaceBackup(value: unknown): WorkspaceData {
   if (Object.values(data.calendarOverrides).some((type) => !['workday', 'rest', 'holiday'].includes(type))) {
     throw new Error('备份中的日历数据格式不正确，原有数据没有被修改')
   }
-  return data as WorkspaceData
+  return normalizeIndexData(data).workspace
+}
+
+function normalizeIndexData(value: Record<string, unknown> | Partial<WorkspaceData>): { workspace: WorkspaceData; migrated: boolean } {
+  const data = value as Partial<WorkspaceData>
+  const document = data.indexDocument
+  if (!isRecord(document) || typeof document.html !== 'string' ||
+    (document.updatedAt !== null && typeof document.updatedAt !== 'string')) {
+    throw new Error('Index 文档数据格式不正确，原有数据没有被修改')
+  }
+
+  let columns: IndexColumn[]
+  let migrated = false
+  if (!Object.prototype.hasOwnProperty.call(value, 'indexColumns')) {
+    columns = [{ id: 'index-main', title: '主文档', html: document.html, updatedAt: document.updatedAt, collapsed: false }]
+    migrated = true
+  } else {
+    if (!Array.isArray(data.indexColumns) || data.indexColumns.length === 0 || !data.indexColumns.every(isValidIndexColumn)) {
+      throw new Error('Index 列数据格式不正确，原有数据没有被修改')
+    }
+    const ids = data.indexColumns.map((column) => column.id)
+    if (new Set(ids).size !== ids.length) throw new Error('Index 列标识重复，原有数据没有被修改')
+    columns = data.indexColumns
+  }
+
+  const firstColumn = columns[0]
+  const mirrorChanged = document.html !== firstColumn.html || document.updatedAt !== firstColumn.updatedAt
+  if (mirrorChanged) migrated = true
+  const workspace = {
+    ...data,
+    indexDocument: { html: firstColumn.html, updatedAt: firstColumn.updatedAt },
+    indexColumns: columns,
+  } as WorkspaceData
+  return { workspace, migrated }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isValidIndexColumn(value: unknown): value is IndexColumn {
+  return isRecord(value) &&
+    typeof value.id === 'string' && value.id.length > 0 &&
+    typeof value.title === 'string' &&
+    typeof value.html === 'string' &&
+    (value.updatedAt === null || typeof value.updatedAt === 'string') &&
+    typeof value.collapsed === 'boolean'
 }
 
 function isValidTask(value: unknown): boolean {

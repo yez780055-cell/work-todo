@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpenText, BriefcaseBusiness, CalendarDays, CircleHelp, ClipboardList, LayoutDashboard, Plus, Search, Settings2, Sparkles } from 'lucide-react'
+import { BookOpenText, BriefcaseBusiness, CalendarDays, ClipboardList, LayoutDashboard, Settings } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
 import { SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
 import { QuickCreateModal } from './components/QuickCreateModal'
-import { RoutinePage, createCompletion } from './components/RoutinePage'
+import { RoutinePage } from './components/RoutinePage'
 import { TaskBoard, TaskHistory } from './components/TaskBoard'
 import { TaskDrawer } from './components/TaskDrawer'
 import { TaskSearchModal } from './components/TaskSearchModal'
 import { SettingsPage } from './components/SettingsPage'
 import { toDateKey } from './lib/dates'
-import { createTask, type CalendarDayType, type RoutineRule, type Task, type TaskStatus } from './lib/model'
+import { createTask, type CalendarDayType, type IndexColumn, type RoutineRule, type Task, type TaskStatus } from './lib/model'
 import { readDesktopBackup, saveDesktopBackup } from './lib/desktopBackup'
 import { isDesktopApp, isWindowsDesktopApp } from './lib/platform'
 import { GLOBAL_SHORTCUT_ERROR_EVENT, GLOBAL_SHORTCUT_EVENT } from './lib/desktopShortcuts'
-import { ariaShortcut, matchesShortcutEvent, type ShortcutAction } from './lib/shortcuts'
+import { matchesShortcutEvent, type ShortcutAction } from './lib/shortcuts'
 import { parseWorkspaceBackup } from './lib/storage'
 import { sanitizeRichText } from './lib/richText'
 import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
+import { updateRoutineCompletion } from './lib/routines'
 import { useWorkspace } from './useWorkspace'
 import { useShortcutSettings } from './useShortcutSettings'
+import { CountdownClockProvider } from './useCountdownClock'
 
 type PageKey = 'tasks' | 'routines' | 'calendar' | 'index' | 'settings'
 
@@ -225,9 +227,7 @@ export default function App() {
   const toggleRoutine = (rule: RoutineRule, done: boolean) => {
     setData((current) => ({
       ...current,
-      routineCompletions: done
-        ? [...current.routineCompletions.filter((item) => item.ruleId !== rule.id || item.date !== localDateKey), createCompletion(rule, localDateKey)]
-        : current.routineCompletions.filter((item) => item.ruleId !== rule.id || item.date !== localDateKey),
+      routineCompletions: updateRoutineCompletion(current.routineCompletions, rule, localDateKey, done),
     }))
   }
 
@@ -252,10 +252,15 @@ export default function App() {
     })
   }
 
-  const updateIndex = (html: string) => setData((current) => ({
-    ...current,
-    indexDocument: { html: sanitizeRichText(html), updatedAt: new Date().toISOString() },
-  }))
+  const updateIndexColumns = (columns: IndexColumn[]) => setData((current) => {
+    const indexColumns = columns.map((column) => ({ ...column, html: sanitizeRichText(column.html) }))
+    const firstColumn = indexColumns[0]
+    return {
+      ...current,
+      indexColumns,
+      indexDocument: { html: firstColumn.html, updatedAt: firstColumn.updatedAt },
+    }
+  })
 
   const exportBackup = async () => {
     const backup = { format: 'work-todo-backup', version: 1, exportedAt: new Date().toISOString(), workspace: data }
@@ -304,10 +309,10 @@ export default function App() {
   if (!ready) return <div className="loading-screen"><div className="loading-mark"><BriefcaseBusiness size={22} /></div><strong>正在打开你的工作空间</strong><span>读取本机保存的数据…</span></div>
 
   return (
+    <CountdownClockProvider>
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-lockup"><div className="brand-mark"><BriefcaseBusiness size={18} /></div><div><strong>WORK SPACE</strong><span>个人工作台</span></div></div>
-        <div className="workspace-label"><span>MY WORKSPACE</span><span className="workspace-dot" /></div>
         <nav className="main-nav" aria-label="主导航">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon
@@ -315,33 +320,21 @@ export default function App() {
               <span className="nav-icon"><Icon size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>{item.label}</strong><small>{item.description}</small></span>
             </button>
           })}
-          <button className={`nav-item mobile-settings-nav ${activePage === 'settings' ? 'nav-item-active' : ''}`} type="button" aria-label="设置" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}>
-            <span className="nav-icon"><Settings2 size={18} strokeWidth={1.8} /></span><span className="nav-copy"><strong>设置</strong></span>
-          </button>
         </nav>
-        <div className="sidebar-bottom">
-          <div className="local-storage-card"><div className="storage-card-icon"><Sparkles size={15} /></div><div><strong>本机优先</strong><span>数据仅保存在{isDesktop ? '当前桌面应用' : '当前浏览器'}</span></div></div>
-          <button className={`settings-nav ${activePage === 'settings' ? 'settings-nav-active' : ''}`} type="button" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}><Settings2 size={16} />设置</button>
-          <div className="sidebar-profile"><span className="profile-avatar">W</span><span><strong>我的工作空间</strong><small>仅自己使用</small></span><CircleHelp size={16} /></div>
-        </div>
       </aside>
 
       <main className="main-area">
         <header className="topbar">
           <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{currentPageLabel}</strong></div>
-          <div className="topbar-actions">
-            <button className="button button-secondary topbar-action" type="button" aria-label="快速创建任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.quickCreate'].shortcut)} title="快速创建任务" onClick={() => setQuickCreateOpen(true)}><Plus size={15} /><span className="topbar-action-label">快速新建</span><kbd>{shortcutSettings.settings.bindings['window.quickCreate'].enabled ? shortcutSettings.settings.bindings['window.quickCreate'].shortcut : '未分配'}</kbd></button>
-            <button className="button button-secondary topbar-action" type="button" aria-label="搜索任务" aria-keyshortcuts={ariaShortcut(shortcutSettings.settings.bindings['window.searchTasks'].shortcut)} title="搜索任务" onClick={() => setTaskSearchOpen(true)}><Search size={15} /><span className="topbar-action-label">搜索任务</span><kbd>{shortcutSettings.settings.bindings['window.searchTasks'].enabled ? shortcutSettings.settings.bindings['window.searchTasks'].shortcut : '未分配'}</kbd></button>
-          </div>
-          <div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /></div>
+          <div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /><button type="button" className="topbar-settings-button" title="设置" aria-label="设置" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}><Settings size={18} /></button></div>
         </header>
         {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setActivePage('settings')}>打开备份设置</button></div>}
         {shortcutRuntimeError && <div className="shortcut-runtime-error" role="alert">快捷键唤起提示：{shortcutRuntimeError}<button aria-label="关闭快捷键提示" onClick={() => setShortcutRuntimeError('')}>关闭</button></div>}
         <div className={`page-content page-${activePage}`}>
-          {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={openExistingTask} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} />}
+          {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={openExistingTask} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} onOpenSearch={() => setTaskSearchOpen(true)} />}
           {activePage === 'routines' && <RoutinePage rules={data.routineRules} completions={data.routineCompletions} dateKey={localDateKey} calendarOverrides={data.calendarOverrides} onToggleCompletion={toggleRoutine} onSaveRule={saveRoutineRule} onDeleteRule={deleteRoutineRule} onToggleRule={toggleRoutineRule} />}
           {activePage === 'calendar' && <CalendarPage overrides={data.calendarOverrides} onSetDays={setCalendarDays} />}
-          {activePage === 'index' && <IndexPage html={data.indexDocument.html} saveState={saveState} onChange={updateIndex} resetVersion={resetVersion} />}
+          {activePage === 'index' && <IndexPage columns={data.indexColumns} saveState={saveState} onChange={updateIndexColumns} resetVersion={resetVersion} />}
           {activePage === 'settings' && <SettingsPage
             shortcutController={shortcutSettings}
             isWindowsDesktop={isWindowsDesktop}
@@ -356,11 +349,12 @@ export default function App() {
         </div>
       </main>
 
-      {drawerOpen && <TaskDrawer task={activeTask} defaultStatus={newTaskStatus} onSave={updateTask} onDelete={handleDeleteTask} onClose={() => { setDrawerOpen(false); setActiveTaskId(null) }} />}
+      {drawerOpen && <TaskDrawer task={activeTask} defaultStatus={newTaskStatus} now={now} onSave={updateTask} onDelete={handleDeleteTask} onClose={() => { setDrawerOpen(false); setActiveTaskId(null) }} />}
       {historyOpen && <TaskHistory tasks={data.tasks} onRestore={handleRestoreTask} onClose={() => setHistoryOpen(false)} />}
       {quickCreateOpen && <QuickCreateModal onClose={() => setQuickCreateOpen(false)} onCreate={createQuickTask} />}
       {taskSearchOpen && <TaskSearchModal tasks={data.tasks} onClose={() => setTaskSearchOpen(false)} onOpenTask={openExistingTask} />}
     </div>
+    </CountdownClockProvider>
   )
 }
 

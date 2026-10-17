@@ -42,9 +42,9 @@ describe('desktop data backup experience', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     render(<App />)
-    await screen.findByRole('button', { name: '快速创建任务' })
-    expect(screen.getByText('数据仅保存在当前桌面应用')).toBeTruthy()
-    fireEvent.click(document.querySelector('.settings-nav') as HTMLButtonElement)
+    await screen.findByRole('button', { name: '已完成历史' })
+    expect(document.querySelector('.local-storage-card')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
 
     expect(await screen.findByRole('heading', { name: '本机数据与备份' })).toBeTruthy()
     expect(screen.getByText(/与网页端不自动同步/)).toBeTruthy()
@@ -59,7 +59,7 @@ describe('desktop data backup experience', () => {
 
   it('routes the Index backup shortcut to Settings', async () => {
     render(<App />)
-    await screen.findByRole('button', { name: '快速创建任务' })
+    await screen.findByRole('button', { name: '已完成历史' })
     const mainNavigation = screen.getByRole('navigation', { name: '主导航' })
     fireEvent.click(within(mainNavigation).getByRole('button', { name: /Index/ }))
     fireEvent.click(screen.getByRole('button', { name: '导入 / 导出备份' }))

@@ -39,6 +39,21 @@ export function getWeekdayIndex(dateKey: string): number {
   return (dateFromKey(dateKey).getDay() + 6) % 7
 }
 
+export function shiftDateKey(dateKey: string, days: number): string {
+  const date = dateFromKey(dateKey)
+  date.setDate(date.getDate() + days)
+  return toDateKey(date)
+}
+
+export function getWeekStartKey(dateKey: string): string {
+  return shiftDateKey(dateKey, -getWeekdayIndex(dateKey))
+}
+
+export function getWeekDateKeys(dateKey: string): string[] {
+  const start = getWeekStartKey(dateKey)
+  return Array.from({ length: 7 }, (_, index) => shiftDateKey(start, index))
+}
+
 export function recurrenceMatches(rule: Pick<RoutineRule, 'recurrence' | 'weekdays'>, dateKey: string): boolean {
   const weekday = getWeekdayIndex(dateKey)
   switch (rule.recurrence as RecurrenceType) {
@@ -90,15 +105,42 @@ export function formatDateLabel(dateKey: string, now = new Date()): string {
 }
 
 export function formatCountdown(dueDate: string, dueTime: string, now = new Date()): string {
+  return getTaskDeadlineDisplay(dueDate, dueTime, now).text
+}
+
+export type DeadlineTone = 'today' | 'near' | 'far' | 'overdue' | ''
+
+export function getTaskDeadlineDisplay(dueDate: string, dueTime: string, now = new Date()): { text: string; tone: DeadlineTone } {
   const target = getDueDateTime(dueDate, dueTime)
-  if (!target) return ''
+  if (!target || Number.isNaN(target.getTime())) return { text: '', tone: '' }
   const delta = target.getTime() - now.getTime()
-  const totalMinutes = Math.ceil(Math.abs(delta) / 60_000)
-  const days = Math.floor(totalMinutes / (24 * 60))
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
-  const minutes = totalMinutes % 60
-  const span = days > 0 ? `${days} 天 ${hours} 小时` : hours > 0 ? `${hours} 小时 ${minutes} 分钟` : `${Math.max(1, minutes)} 分钟`
-  return delta < 0 ? `逾期 ${span}` : `${span}后截止`
+  if (delta <= 0) return { text: '已逾期', tone: 'overdue' }
+
+  const calendarDays = getCalendarDayDistance(toDateKey(now), dueDate)
+  if (calendarDays === 0) {
+    const seconds = Math.ceil(delta / 1000)
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const remainingSeconds = seconds % 60
+    return {
+      text: `${pad2(hours)}:${pad2(minutes)}:${pad2(remainingSeconds)}`,
+      tone: 'today',
+    }
+  }
+
+  const totalHours = Math.ceil(delta / 3_600_000)
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  return { text: `${days}天 ${hours}小时`, tone: calendarDays <= 3 ? 'near' : 'far' }
+}
+
+export function getCalendarDayDistance(fromKey: string, toKey: string): number {
+  const toOrdinal = (key: string) => {
+    const [year, month, day] = key.split('-').map(Number)
+    if (!year || !month || !day) return Number.NaN
+    return Date.UTC(year, month - 1, day) / 86_400_000
+  }
+  return toOrdinal(toKey) - toOrdinal(fromKey)
 }
 
 export function getCalendarMonthGrid(year: number, month: number): string[] {
