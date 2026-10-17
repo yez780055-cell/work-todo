@@ -17,7 +17,7 @@ export function SettingsPage({ shortcutController, isWindowsDesktop, data, isDes
   onImport: (file?: File) => Promise<void>
 }) {
   return <section className="settings-page">
-    <header className="settings-page-heading"><h1>设置</h1><p>管理快捷键以及本机数据备份。</p></header>
+    <header className="settings-page-heading"><h1>设置</h1></header>
     <ShortcutSettingsPage controller={shortcutController} isWindowsDesktop={isWindowsDesktop} />
     <BackupSettingsSection data={data} isDesktop={isDesktop} saveState={saveState} message={message} error={error} onExport={onExport} onImport={onImport} />
   </section>
@@ -59,7 +59,7 @@ function BackupSettingsSection({ data, isDesktop, saveState, message, error, onE
       </div>
     </header>
     <div className="backup-content">
-      <div className={`backup-status backup-status-${saveState.status}`}><span className="save-dot" /><div><strong>{saveState.message}</strong><small>{saveState.status === 'error' ? '请先导出当前数据，避免数据丢失。' : '建议定期导出备份，妥善保存在安全位置。'}</small></div></div>
+      <div className={`backup-status backup-status-${saveState.status}`}><span className="save-dot" /><div><strong>{saveState.message}</strong>{saveState.status === 'error' && <small>请先导出当前数据，避免数据丢失。</small>}</div></div>
       <div className="backup-actions">
         <Button variant="primary" icon={<Download size={16} />} onClick={() => void onExport()}>导出全部数据</Button>
         {isDesktop
@@ -70,7 +70,7 @@ function BackupSettingsSection({ data, isDesktop, saveState, message, error, onE
       {message && <p className="backup-message"><Check size={14} />{message}</p>}
       {error && <p className="backup-error"><X size={14} />{error}</p>}
       <div className="backup-details"><span>看板任务 <strong>{data.tasks.length}</strong></span><span>例行规则 <strong>{data.routineRules.length}</strong></span><span>日历排班 <strong>{Object.keys(data.calendarOverrides).length} 天</strong></span></div>
-      <p className="backup-note">备份包含任务、子任务、例行任务完成记录、日历标记和 Index 文档。导入会替换{isDesktop ? '当前桌面应用' : '当前浏览器'}中的全部数据。</p>
+      <p className="backup-note">备份包含任务、例行任务、工作日历和全部 Index 内容。导入会替换当前工作区数据。</p>
     </div>
   </section>
 }

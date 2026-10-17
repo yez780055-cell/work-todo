@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { CalendarClock, Check, Clock3, History, Plus, Star } from 'lucide-react'
-import { formatCountdown, formatDateLabel, isInCurrentWeek } from '../lib/dates'
+import { CalendarClock, Check, Clock3, History, Plus, Search, Star } from 'lucide-react'
+import { formatDateLabel, getTaskDeadlineDisplay, isInCurrentWeek } from '../lib/dates'
 import { STATUS_LABELS, STATUS_ORDER, type Task, type TaskStatus } from '../lib/model'
 import { Button, EmptyState } from './common'
+import { useCountdownNow } from '../useCountdownClock'
 
 export function TaskBoard({
-  tasks, now, onOpenTask, onCreateTask, onMoveTask, onToggleSubtask, onOpenHistory,
+  tasks, now, onOpenTask, onCreateTask, onMoveTask, onToggleSubtask, onOpenHistory, onOpenSearch,
 }: {
   tasks: Task[]
   now: Date
@@ -14,8 +15,10 @@ export function TaskBoard({
   onMoveTask: (id: string, status: TaskStatus) => void
   onToggleSubtask: (taskId: string, subtaskId: string, done: boolean) => void
   onOpenHistory: () => void
+  onOpenSearch?: () => void
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const countdownNow = useCountdownNow(now)
   const columns = useMemo(() => {
     const visibleTasks = tasks.filter((task) => task.status !== 'done' || isInCurrentWeek(task.completedAt, now))
     return STATUS_ORDER.map((status) => ({
@@ -38,7 +41,9 @@ export function TaskBoard({
     <div className="board-wrap">
       <div className="board-toolbar">
         <div className="board-summary"><span>{tasks.filter((task) => task.status !== 'done').length} 项进行中</span><i /> <span>{tasks.filter((task) => task.important && task.status !== 'done').length} 项重要</span></div>
+        <div className="board-toolbar-actions">{onOpenSearch && <Button variant="ghost" onClick={onOpenSearch} icon={<Search size={15} />}>搜索任务</Button>}
         <Button onClick={onOpenHistory} icon={<History size={16} />}>已完成历史</Button>
+        </div>
       </div>
       <div className="task-board">
         {columns.map(({ status, tasks: columnTasks }) => (
@@ -60,7 +65,7 @@ export function TaskBoard({
                 <TaskCard
                   key={task.id}
                   task={task}
-                  now={now}
+                  now={countdownNow}
                   onClick={() => onOpenTask(task)}
                   onToggleSubtask={onToggleSubtask}
                   onDragStart={() => setDraggingId(task.id)}
@@ -85,8 +90,8 @@ function TaskCard({ task, now, onClick, onToggleSubtask, onDragStart, onDragEnd 
 }) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false)
   const isCompleted = task.status === 'done'
-  const countdown = isCompleted ? '' : formatCountdown(task.dueDate, task.dueTime, now)
-  const overdue = countdown.startsWith('逾期')
+  const deadline = isCompleted ? { text: '', tone: '' as const } : getTaskDeadlineDisplay(task.dueDate, task.dueTime, now)
+  const overdue = deadline.tone === 'overdue'
   const completedSubtasks = task.subtasks.filter((item) => item.done).length
   const subtaskListId = `task-subtasks-${task.id}`
   return (
@@ -112,9 +117,9 @@ function TaskCard({ task, now, onClick, onToggleSubtask, onDragStart, onDragEnd 
         </span>
         <strong className="task-card-title">{task.title || '未命名任务'}</strong>
         {task.note && <span className="task-card-note">{task.note}</span>}
-        {!isCompleted && (task.dueDate || countdown) && <span className="task-card-meta">
+        {!isCompleted && (task.dueDate || deadline.text) && <span className="task-card-meta">
           {task.dueDate && <span className={`due-pill ${overdue ? 'due-overdue' : ''}`}><CalendarClock size={13} />{formatDateLabel(task.dueDate, now)}{task.dueTime ? ` ${task.dueTime}` : ''}</span>}
-          {countdown && <span className={`countdown ${overdue ? 'countdown-overdue' : ''}`}><Clock3 size={12} />{countdown}</span>}
+          {deadline.text && <span className={`countdown countdown-${deadline.tone}`}><Clock3 size={12} />{deadline.text}</span>}
         </span>}
       </button>
       {task.subtasks.length > 0 && <>

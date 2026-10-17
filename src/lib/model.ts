@@ -52,6 +52,12 @@ export interface IndexDocument {
   updatedAt: string | null
 }
 
+export interface IndexColumn extends IndexDocument {
+  id: string
+  title: string
+  collapsed: boolean
+}
+
 export interface WorkspaceData {
   schemaVersion: 1
   tasks: Task[]
@@ -59,6 +65,7 @@ export interface WorkspaceData {
   routineCompletions: RoutineCompletion[]
   calendarOverrides: Record<string, CalendarDayType>
   indexDocument: IndexDocument
+  indexColumns: IndexColumn[]
 }
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -78,13 +85,21 @@ export const createId = () => {
 }
 
 export function createEmptyWorkspace(): WorkspaceData {
+  const firstColumn: IndexColumn = {
+    id: 'index-main',
+    title: '主文档',
+    html: '<p><br></p>',
+    updatedAt: null,
+    collapsed: false,
+  }
   return {
     schemaVersion: 1,
     tasks: [],
     routineRules: [],
     routineCompletions: [],
     calendarOverrides: {},
-    indexDocument: { html: '<p><br></p>', updatedAt: null },
+    indexDocument: { html: firstColumn.html, updatedAt: firstColumn.updatedAt },
+    indexColumns: [firstColumn],
   }
 }
 

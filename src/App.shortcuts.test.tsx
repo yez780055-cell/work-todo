@@ -28,7 +28,7 @@ async function renderWorkspace(tasks: Task[] = [], strict = false) {
   loadWorkspaceMock.mockReset().mockResolvedValue(workspace)
   saveWorkspaceMock.mockReset().mockResolvedValue(undefined)
   render(strict ? <StrictMode><App /></StrictMode> : <App />)
-  await screen.findByRole('button', { name: '快速创建任务' })
+  await screen.findByRole('button', { name: '已完成历史' })
   await waitFor(() => expect(saveWorkspaceMock).toHaveBeenCalled())
   saveWorkspaceMock.mockClear()
 }
@@ -56,11 +56,30 @@ describe('global task shortcuts and quick creation', () => {
     window.localStorage.clear()
   })
 
+  it('keeps the shared topbar free of permanent quick-create and task-search cards on every page', async () => {
+    await renderWorkspace()
+    const navigation = within(screen.getByRole('navigation', { name: '主导航' }))
+    const topbar = document.querySelector('.topbar')!
+    const expectNoTopbarActions = () => {
+      expect(topbar.querySelector('.topbar-action, .topbar-actions')).toBeNull()
+      expect(topbar.textContent).not.toMatch(/快速新建|快速创建|搜索任务/)
+    }
+
+    for (const label of ['任务看板', '例行任务', '工作日历', 'Index']) {
+      fireEvent.click(navigation.getByRole('button', { name: new RegExp(label) }))
+      expectNoTopbarActions()
+    }
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    await screen.findByRole('heading', { name: '设置' })
+    expectNoTopbarActions()
+  }, 15_000)
+
   it('applies a saved custom in-window shortcut and shows the Windows-only global limitation', async () => {
     await renderWorkspace()
     const mainNavigation = within(screen.getByRole('navigation', { name: '主导航' }))
     expect(mainNavigation.queryByRole('button', { name: /快捷键/ })).toBeNull()
-    fireEvent.click(document.querySelector('.settings-nav') as HTMLButtonElement)
+    expect(document.querySelector('.topbar-action')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
     expect(await screen.findByRole('heading', { name: '设置' })).not.toBeNull()
     expect(screen.getByRole('heading', { name: '窗口内快捷键' })).not.toBeNull()
     expect(screen.getByText(/当前运行环境不支持注册系统级快捷键/)).not.toBeNull()
@@ -75,7 +94,7 @@ describe('global task shortcuts and quick creation', () => {
     fireEvent.keyDown(screen.getByRole('textbox', { name: '任务标题' }), { key: 'Escape' })
     fireEvent.keyDown(document.body, { key: 'n' })
     expect(screen.queryByRole('dialog', { name: '快速创建任务' })).toBeNull()
-  })
+  }, 15_000)
 
   it('opens quick creation with N and focuses its title field', async () => {
     await renderWorkspace()
@@ -102,7 +121,7 @@ describe('global task shortcuts and quick creation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     fireEvent.click(screen.getByRole('button', { name: /Index/ }))
-    const editor = screen.getByRole('textbox', { name: '工作 Index 主文档' })
+    const editor = screen.getByRole('textbox', { name: '主文档内容' })
     fireEvent.keyDown(editor, { key: 'n' })
     expect(screen.queryByRole('dialog', { name: '快速创建任务' })).toBeNull()
 
@@ -189,6 +208,25 @@ describe('global task shortcuts and quick creation', () => {
     expect(document.querySelector('.column-todo .column-count')?.textContent).toBe('1')
     expect(document.querySelector('.column-done .column-count')?.textContent).toBe('1')
   })
+
+  it('synchronizes the legacy primary document mirror after deleting the first Index column', async () => {
+    const workspace = createEmptyWorkspace()
+    workspace.indexColumns = [
+      { id: 'primary', title: '主文档', html: '<p>原始主文档</p>', updatedAt: null, collapsed: false },
+      { id: 'second', title: '第二列', html: '<p>保留的内容</p>', updatedAt: null, collapsed: false },
+    ]
+    workspace.indexDocument = { html: workspace.indexColumns[0].html, updatedAt: null }
+    loadWorkspaceMock.mockReset().mockResolvedValue(workspace)
+    saveWorkspaceMock.mockReset().mockResolvedValue(undefined)
+    render(<App />)
+    await screen.findByRole('button', { name: '已完成历史' })
+    fireEvent.click(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: '删除列：主文档' }))
+    fireEvent.click(screen.getByRole('button', { name: /^删除列$/ }))
+    await waitFor(() => expect(lastSavedWorkspace().indexDocument.html).toContain('保留的内容'))
+    expect(lastSavedWorkspace().indexColumns).toHaveLength(1)
+    expect(lastSavedWorkspace().indexDocument.html).toBe(lastSavedWorkspace().indexColumns[0].html)
+  })
 })
 
 describe('global task search', () => {
@@ -204,18 +242,24 @@ describe('global task search', () => {
       /例行任务/,
       /工作日历/,
       /Index/,
-      /设置/,
     ]
     const mainNavigation = within(screen.getByRole('navigation', { name: '主导航' }))
     for (const [index, page] of pages.entries()) {
       fireEvent.click(mainNavigation.getByRole('button', { name: page }))
+      expect(document.querySelector('.topbar-action')).toBeNull()
       openTaskSearch(index % 2 === 0 ? 'metaKey' : 'ctrlKey')
       fireEvent.keyDown(screen.getByRole('textbox', { name: '搜索任务标题、备注或子任务' }), { key: 'Escape' })
       expect(screen.queryByRole('dialog', { name: '全局任务搜索' })).toBeNull()
     }
 
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    expect(document.querySelector('.topbar-action')).toBeNull()
+    openTaskSearch('ctrlKey')
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '搜索任务标题、备注或子任务' }), { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: '全局任务搜索' })).toBeNull()
+
     fireEvent.click(mainNavigation.getByRole('button', { name: /Index/ }))
-    const editor = screen.getByRole('textbox', { name: '工作 Index 主文档' })
+    const editor = screen.getByRole('textbox', { name: '主文档内容' })
     fireEvent.keyDown(editor, { key: 'k', ctrlKey: true })
     expect(screen.queryByRole('dialog', { name: '全局任务搜索' })).toBeNull()
   })
@@ -309,9 +353,9 @@ describe('global task search', () => {
 
   it('returns focus after closing and keeps global shortcuts to one listener under StrictMode', async () => {
     await renderWorkspace([], true)
-    const quickButton = screen.getByRole('button', { name: '快速创建任务' })
+    const quickButton = screen.getByRole('button', { name: '在未开始中新建任务' })
     quickButton.focus()
-    fireEvent.click(quickButton)
+    fireEvent.keyDown(quickButton, { key: 'n' })
     const quickInput = screen.getByRole('textbox', { name: '任务标题' })
     expect(document.activeElement).toBe(quickInput)
     const lastAction = screen.getByRole('button', { name: '创建并填写详情' })
