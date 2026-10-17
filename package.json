@@ -1,14 +1,14 @@
 {
   "name": "work-todo",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "vite --host 127.0.0.1",
     "dev:tauri": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "build": "tsc -b && vite build",
     "test": "vitest run",
-    "preview": "vite preview --host 0.0.0.0",
+    "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -30,7 +30,7 @@
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^25.0.1",
     "typescript": "~5.7.2",
-    "vite": "^5.4.21",
-    "vitest": "^2.1.8"
+    "vite": "^6.4.4",
+    "vitest": "^3.2.7"
   }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "work-todo"
-version = "1.0.0"
+version = "1.0.2"
 description = "Work Todo Windows desktop application"
 authors = ["Work Todo"]
 edition = "2021"

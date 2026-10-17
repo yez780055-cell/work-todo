@@ -68,4 +68,19 @@ describe('workspace durability helpers', () => {
     expect(result.current.data).toEqual(current)
     expect(result.current.saveState).toMatchObject({ status: 'error', message: '磁盘写入失败' })
   })
+
+  it('does not autosave or claim durability after the local workspace fails to load', async () => {
+    loadWorkspaceMock.mockRejectedValue(new Error('本地工作区版本不受支持'))
+    const { result } = renderHook(() => useWorkspace())
+    await waitFor(() => expect(result.current.saveState).toMatchObject({ status: 'error', message: '本地工作区版本不受支持' }))
+
+    const edited = createEmptyWorkspace()
+    edited.tasks.push(createTask('临时编辑，不可覆盖损坏数据'))
+    act(() => result.current.setData(edited))
+    await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 300)) })
+
+    expect(saveWorkspaceMock).not.toHaveBeenCalled()
+    await expect(result.current.flushWorkspace()).rejects.toThrow('本地数据库尚未就绪')
+    expect(saveWorkspaceMock).not.toHaveBeenCalled()
+  })
 })
