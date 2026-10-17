@@ -25,10 +25,8 @@ export function getRoutineMatrixCellState(
   completed: boolean,
 ): RoutineMatrixCellState {
   if (completed) return 'complete'
+  if (date < today) return 'unknown'
   if (!rule) return 'unavailable'
-
-  const historicalSchedule = routineRunsOnDate({ ...rule, enabled: true }, date, overrides)
-  if (date < today) return historicalSchedule ? 'unknown' : 'unavailable'
 
   const applies = rule.enabled && routineRunsOnDate(rule, date, overrides)
   if (!applies) return 'unavailable'

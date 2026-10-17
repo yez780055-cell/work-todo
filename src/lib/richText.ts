@@ -1,4 +1,5 @@
 const ALLOWED_TAGS = new Set(['P', 'BR', 'H2', 'H3', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'BLOCKQUOTE', 'CODE'])
+const DROP_CONTENT_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED'])
 
 export function sanitizeRichText(html: string): string {
   if (typeof DOMParser === 'undefined') return html.replace(/<[^>]*>/g, '')
@@ -7,6 +8,7 @@ export function sanitizeRichText(html: string): string {
     if (node.nodeType === Node.TEXT_NODE) return [document.createTextNode(node.textContent ?? '')]
     if (node.nodeType !== Node.ELEMENT_NODE) return []
     const element = node as HTMLElement
+    if (DROP_CONTENT_TAGS.has(element.tagName)) return []
     const children = Array.from(element.childNodes).flatMap(clean)
     if (!ALLOWED_TAGS.has(element.tagName)) return children
     const replacement = document.createElement(element.tagName.toLowerCase())

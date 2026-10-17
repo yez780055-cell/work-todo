@@ -16,7 +16,7 @@ import { isDesktopApp, isWindowsDesktopApp } from './lib/platform'
 import { GLOBAL_SHORTCUT_ERROR_EVENT, GLOBAL_SHORTCUT_EVENT } from './lib/desktopShortcuts'
 import { matchesShortcutEvent, type ShortcutAction } from './lib/shortcuts'
 import { parseWorkspaceBackup } from './lib/storage'
-import { sanitizeRichText } from './lib/richText'
+import { sanitizeImportedIndexWorkspace, updateIndexWorkspace } from './lib/indexWorkspace'
 import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
 import { updateRoutineCompletion } from './lib/routines'
 import { useWorkspace } from './useWorkspace'
@@ -252,15 +252,7 @@ export default function App() {
     })
   }
 
-  const updateIndexColumns = (columns: IndexColumn[]) => setData((current) => {
-    const indexColumns = columns.map((column) => ({ ...column, html: sanitizeRichText(column.html) }))
-    const firstColumn = indexColumns[0]
-    return {
-      ...current,
-      indexColumns,
-      indexDocument: { html: firstColumn.html, updatedAt: firstColumn.updatedAt },
-    }
-  })
+  const updateIndexColumns = (columns: IndexColumn[]) => setData((current) => updateIndexWorkspace(current, columns))
 
   const exportBackup = async () => {
     const backup = { format: 'work-todo-backup', version: 1, exportedAt: new Date().toISOString(), workspace: data }
@@ -293,7 +285,7 @@ export default function App() {
     try {
       const contents = isDesktop ? await readDesktopBackup() : await file!.text()
       if (contents === null) return
-      const workspace = parseWorkspaceBackup(JSON.parse(contents))
+      const workspace = sanitizeImportedIndexWorkspace(parseWorkspaceBackup(JSON.parse(contents)))
       const storageName = isDesktop ? '当前桌面应用' : '当前浏览器'
       if (!window.confirm(`导入后，${storageName}中的数据会被备份文件替换。请先确认已导出现有数据。`)) return
       await replaceWorkspace(workspace)

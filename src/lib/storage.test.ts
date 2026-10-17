@@ -207,6 +207,77 @@ describe('workspace storage and backup compatibility', () => {
     expect(() => parseWorkspaceBackup({ ...workspace, tasks: [{ id: 'incomplete-task' }] }))
       .toThrow('该备份版本无法导入')
   })
+
+  it.each([
+    ['duplicate task IDs', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const task = createTask('重复 ID')
+      workspace.tasks.push(task, { ...task })
+    }],
+    ['duplicate subtask IDs within a task', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const task = createTask('重复子任务 ID')
+      task.subtasks = [{ id: 'same', title: '第一步', done: false }, { id: 'same', title: '第二步', done: false }]
+      workspace.tasks.push(task)
+    }],
+    ['duplicate routine rule IDs', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const rule = { id: 'same-rule', title: '规则', recurrence: 'daily' as const, weekdays: [], runOnRestDays: true, runOnHolidays: true, enabled: true, order: 0, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' }
+      workspace.routineRules.push(rule, { ...rule })
+    }],
+    ['duplicate routine completion IDs', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const completion = { id: 'same-completion', ruleId: 'deleted-rule', ruleTitle: '历史规则', date: '2026-10-14', completedAt: '2026-10-14T00:00:00.000Z' }
+      workspace.routineCompletions.push(completion, { ...completion, date: '2026-10-15' })
+    }],
+  ])('rejects %s without rewriting stored workspace data', async (_label, mutate) => {
+    const malformed = createEmptyWorkspace()
+    mutate(malformed)
+    await putStoredWorkspace(malformed)
+    await expect(loadWorkspace()).rejects.toThrow('工作区记录标识重复')
+    expect(await getStoredWorkspace()).toEqual(malformed)
+    expect(() => parseWorkspaceBackup(malformed)).toThrow('该备份版本无法导入')
+  })
+
+  it.each([
+    ['impossible task due date', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const task = createTask('无效日期')
+      task.dueDate = '2026-02-30'
+      workspace.tasks.push(task)
+    }],
+    ['invalid task due time', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const task = createTask('无效时间')
+      task.dueDate = '2026-10-20'
+      task.dueTime = '24:00'
+      workspace.tasks.push(task)
+    }],
+    ['time without due date', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const task = createTask('缺少日期')
+      task.dueTime = '09:30'
+      workspace.tasks.push(task)
+    }],
+    ['invalid task timestamp', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      const task = createTask('无效时间戳')
+      task.updatedAt = '2026-02-30T09:00:00.000Z'
+      workspace.tasks.push(task)
+    }],
+    ['non-finite routine ordering value', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      workspace.routineRules.push({ id: 'rule', title: '规则', recurrence: 'daily', weekdays: [0], runOnRestDays: true, runOnHolidays: true, enabled: true, order: Number.POSITIVE_INFINITY, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' })
+    }],
+    ['invalid calendar date key', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      workspace.calendarOverrides['2026-02-30'] = 'rest'
+    }],
+    ['invalid routine completion date', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      workspace.routineCompletions.push({ id: 'completion', ruleId: 'deleted-rule', ruleTitle: '旧规则', date: '2026-02-30', completedAt: '2026-10-14T00:00:00.000Z' })
+    }],
+    ['invalid Index timestamp', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      workspace.indexColumns[0].updatedAt = 'not-a-timestamp'
+      workspace.indexDocument.updatedAt = 'not-a-timestamp'
+    }],
+  ])('rejects %s without rewriting stored workspace data', async (_label, mutate) => {
+    const malformed = createEmptyWorkspace()
+    mutate(malformed)
+    await putStoredWorkspace(malformed)
+    await expect(loadWorkspace()).rejects.toThrow()
+    expect(await getStoredWorkspace()).toEqual(malformed)
+    expect(() => parseWorkspaceBackup(malformed)).toThrow()
+  })
 })
 
 async function putStoredWorkspace(value: unknown): Promise<void> {

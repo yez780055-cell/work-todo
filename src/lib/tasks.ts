@@ -1,4 +1,17 @@
 import type { Task, TaskStatus } from './model'
+import { getDueDateTime } from './dates'
+
+export function compareTasksForBoard(a: Task, b: Task): number {
+  if (a.important !== b.important) return a.important ? -1 : 1
+
+  const aDeadline = getDueDateTime(a.dueDate, a.dueTime)?.getTime() ?? Number.POSITIVE_INFINITY
+  const bDeadline = getDueDateTime(b.dueDate, b.dueTime)?.getTime() ?? Number.POSITIVE_INFINITY
+  if (aDeadline !== bDeadline) return aDeadline - bDeadline
+
+  return b.updatedAt.localeCompare(a.updatedAt) ||
+    b.createdAt.localeCompare(a.createdAt) ||
+    a.id.localeCompare(b.id)
+}
 
 export function setTaskStatus(task: Task, status: TaskStatus, now = new Date().toISOString()): Task {
   if (status === task.status) return task
