@@ -15,7 +15,7 @@ export function TaskSearchModal({ tasks, onClose, onOpenTask }: {
   const dialogRef = useRef<HTMLElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
-  const skipFocusRestore = useDialogFocus(dialogRef, searchInputRef)
+  const skipFocusRestore = useDialogFocus(dialogRef, searchInputRef, onClose)
   const results = useMemo(() => searchTasks(tasks, query), [tasks, query])
   const selectedIndex = Math.min(activeIndex, Math.max(0, results.items.length - 1))
   const activeResultId = results.items.length > 0 ? `task-search-result-${selectedIndex}` : undefined
@@ -51,7 +51,7 @@ export function TaskSearchModal({ tasks, onClose, onOpenTask }: {
 
   return (
     <div className="modal-backdrop task-search-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className="modal task-search-dialog" role="dialog" aria-modal="true" aria-label="全局任务搜索" ref={dialogRef}>
+      <section className="modal task-search-dialog" role="dialog" aria-modal="true" aria-label="全局任务搜索" tabIndex={-1} ref={dialogRef}>
         <header className="modal-header task-search-header">
           <div><h2>搜索任务</h2><p>搜索所有状态下的任务、备注和子任务。</p></div>
           <button className="icon-button close-button" type="button" aria-label="关闭任务搜索" onClick={onClose}><X size={18} /></button>

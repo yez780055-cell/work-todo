@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpenText, BriefcaseBusiness, CalendarDays, ClipboardList, LayoutDashboard, Settings } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
-import { SaveIndicator } from './components/common'
+import { ConfirmDialog, SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
 import { QuickCreateModal } from './components/QuickCreateModal'
 import { RoutinePage } from './components/RoutinePage'
@@ -10,7 +10,7 @@ import { TaskDrawer } from './components/TaskDrawer'
 import { TaskSearchModal } from './components/TaskSearchModal'
 import { SettingsPage } from './components/SettingsPage'
 import { toDateKey } from './lib/dates'
-import { createTask, type CalendarDayType, type IndexColumn, type RoutineRule, type Task, type TaskStatus } from './lib/model'
+import { createTask, type CalendarDayType, type IndexColumn, type RoutineRule, type Task, type TaskStatus, type WorkspaceData } from './lib/model'
 import { readDesktopBackup, saveDesktopBackup } from './lib/desktopBackup'
 import { isDesktopApp, isWindowsDesktopApp } from './lib/platform'
 import { GLOBAL_SHORTCUT_ERROR_EVENT, GLOBAL_SHORTCUT_EVENT } from './lib/desktopShortcuts'
@@ -47,13 +47,15 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [backupError, setBackupError] = useState('')
+  const [pendingTaskDelete, setPendingTaskDelete] = useState<Task | null>(null)
+  const [pendingBackupImport, setPendingBackupImport] = useState<{ workspace: WorkspaceData; storageName: string } | null>(null)
   const [resetVersion, setResetVersion] = useState(0)
   const [shortcutRuntimeError, setShortcutRuntimeError] = useState('')
   const isComposing = useRef(false)
   const shortcutSettingsRef = useRef(shortcutSettings.settings)
   const openDialogsRef = useRef(false)
   shortcutSettingsRef.current = shortcutSettings.settings
-  openDialogsRef.current = drawerOpen || historyOpen || quickCreateOpen || taskSearchOpen
+  openDialogsRef.current = drawerOpen || historyOpen || quickCreateOpen || taskSearchOpen || Boolean(pendingTaskDelete || pendingBackupImport)
   const flushWorkspaceRef = useRef(flushWorkspace)
   flushWorkspaceRef.current = flushWorkspace
   const activeTask = data.tasks.find((task) => task.id === activeTaskId) ?? null
@@ -67,7 +69,7 @@ export default function App() {
     const handleGlobalShortcut = (event: Event) => {
       const action = (event as CustomEvent<{ action?: ShortcutAction }>).detail?.action
       if (action !== 'quickCreate' && action !== 'searchTasks') return
-      if (openDialogsRef.current || document.querySelector('[role="dialog"][aria-modal="true"]')) return
+      if (openDialogsRef.current || document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')) return
       if (action === 'quickCreate') setQuickCreateOpen(true)
       else setTaskSearchOpen(true)
       setShortcutRuntimeError('')
@@ -123,19 +125,7 @@ export default function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return
       if (event.isComposing || event.keyCode === 229 || isComposing.current) return
-
-      if (event.key === 'Escape') {
-        const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')
-        const topmostDialog = dialogs.item(dialogs.length - 1)
-        const closeButton = topmostDialog?.querySelector<HTMLButtonElement>('button[aria-label^="关闭"]')
-        if (topmostDialog && closeButton) {
-          event.preventDefault()
-          closeButton.click()
-        }
-        return
-      }
-
-      const hasOpenDialog = document.querySelector('[role="dialog"][aria-modal="true"]') !== null
+      const hasOpenDialog = document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]') !== null
       const bindings = shortcutSettingsRef.current.bindings
       const searchBinding = bindings['window.searchTasks']
       const quickCreateBinding = bindings['window.quickCreate']
@@ -218,10 +208,16 @@ export default function App() {
   }
 
   const handleDeleteTask = (task: Task) => {
-    if (!window.confirm(`删除“${task.title}”？此操作无法撤销。`)) return
+    setPendingTaskDelete(task)
+  }
+
+  const confirmDeleteTask = () => {
+    const task = pendingTaskDelete
+    if (!task) return
     setData((current) => ({ ...current, tasks: current.tasks.filter((item) => item.id !== task.id) }))
     setDrawerOpen(false)
     setActiveTaskId(null)
+    setPendingTaskDelete(null)
   }
 
   const toggleRoutine = (rule: RoutineRule, done: boolean) => {
@@ -287,14 +283,27 @@ export default function App() {
       if (contents === null) return
       const workspace = sanitizeImportedIndexWorkspace(parseWorkspaceBackup(JSON.parse(contents)))
       const storageName = isDesktop ? '当前桌面应用' : '当前浏览器'
-      if (!window.confirm(`导入后，${storageName}中的数据会被备份文件替换。请先确认已导出现有数据。`)) return
-      await replaceWorkspace(workspace)
+      setPendingBackupImport({ workspace, storageName })
+      setBackupError('')
+      setBackupMessage('')
+    } catch (error) {
+      setBackupMessage('')
+      setBackupError(error instanceof Error ? error.message : '无法读取这个备份文件。')
+    }
+  }
+
+  const confirmBackupImport = async () => {
+    const pending = pendingBackupImport
+    if (!pending) return
+    setPendingBackupImport(null)
+    try {
+      await replaceWorkspace(pending.workspace)
       setResetVersion((value) => value + 1)
       setBackupError('')
       setBackupMessage(isDesktop ? '数据已导入并保存到桌面应用。' : '数据已导入并保存到本机。')
     } catch (error) {
       setBackupMessage('')
-      setBackupError(error instanceof Error ? error.message : '无法读取这个备份文件。')
+      setBackupError(error instanceof Error ? error.message : `无法替换${pending.storageName}中的数据。`)
     }
   }
 
@@ -315,7 +324,7 @@ export default function App() {
         </nav>
       </aside>
 
-      <main className="main-area">
+      <main className="main-area" tabIndex={-1} data-dialog-focus-fallback>
         <header className="topbar">
           <div className="breadcrumb"><span>WORK SPACE</span><span className="breadcrumb-slash">/</span><strong>{currentPageLabel}</strong></div>
           <div className="topbar-right"><span className="topbar-date">{headerDate}</span><SaveIndicator status={saveState.status} message={saveState.message} savedAt={saveState.savedAt} /><button type="button" className="topbar-settings-button" title="设置" aria-label="设置" aria-current={activePage === 'settings' ? 'page' : undefined} onClick={() => setActivePage('settings')}><Settings size={18} /></button></div>
@@ -345,6 +354,21 @@ export default function App() {
       {historyOpen && <TaskHistory tasks={data.tasks} onRestore={handleRestoreTask} onClose={() => setHistoryOpen(false)} />}
       {quickCreateOpen && <QuickCreateModal onClose={() => setQuickCreateOpen(false)} onCreate={createQuickTask} />}
       {taskSearchOpen && <TaskSearchModal tasks={data.tasks} onClose={() => setTaskSearchOpen(false)} onOpenTask={openExistingTask} />}
+      {pendingTaskDelete && <ConfirmDialog
+        title="删除任务？"
+        message={`“${pendingTaskDelete.title || '未命名任务'}”及其子任务会从工作区删除，且无法撤销。`}
+        onClose={() => setPendingTaskDelete(null)}
+        onConfirm={confirmDeleteTask}
+        confirmLabel="删除任务"
+      />}
+      {pendingBackupImport && <ConfirmDialog
+        title="替换当前工作区数据？"
+        message={`导入会用备份文件替换${pendingBackupImport.storageName}中的全部任务、例行任务、日历与 Index 数据。请确认已备份当前数据。`}
+        onClose={() => setPendingBackupImport(null)}
+        onConfirm={() => { void confirmBackupImport() }}
+        confirmLabel="替换并导入"
+        cancelLabel="取消导入"
+      />}
     </div>
     </CountdownClockProvider>
   )
