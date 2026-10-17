@@ -15,7 +15,7 @@ export function QuickCreateModal({ onClose, onCreate }: {
   const dialogRef = useRef<HTMLElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const submitting = useRef(false)
-  const skipFocusRestore = useDialogFocus(dialogRef, titleInputRef)
+  const skipFocusRestore = useDialogFocus(dialogRef, titleInputRef, onClose)
 
   const create = (openDetails: boolean) => {
     if (submitting.current) return
@@ -45,7 +45,7 @@ export function QuickCreateModal({ onClose, onCreate }: {
 
   return (
     <div className="modal-backdrop quick-create-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className="modal quick-create-dialog" role="dialog" aria-modal="true" aria-label="快速创建任务" ref={dialogRef}>
+      <section className="modal quick-create-dialog" role="dialog" aria-modal="true" aria-label="快速创建任务" tabIndex={-1} ref={dialogRef}>
         <header className="modal-header">
           <div><h2>快速创建任务</h2><p>先记下标题，之后可以继续补充任务详情。</p></div>
           <button className="icon-button close-button" type="button" aria-label="关闭快速创建" onClick={onClose}><X size={18} /></button>

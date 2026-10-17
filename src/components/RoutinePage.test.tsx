@@ -59,6 +59,32 @@ describe('weekly routine check-in matrix', () => {
     expect(screen.getByLabelText('今日完成 0/1')).toBeTruthy()
   })
 
+  it('uses an in-app rule deletion confirmation and preserves completed history', async () => {
+    const rule = makeRule('Alpha', 0)
+    const completion: RoutineCompletion = {
+      id: 'completion-alpha',
+      ruleId: rule.id,
+      ruleTitle: rule.title,
+      date: dateKey,
+      completedAt: '2026-10-14T09:00:00.000Z',
+    }
+    render(<Harness initialRules={[rule]} initialCompletions={[completion]} />)
+    fireEvent.click(screen.getByRole('button', { name: '规则管理' }))
+    fireEvent.click(screen.getByRole('button', { name: '删除规则：Alpha' }))
+
+    const confirmation = await screen.findByRole('alertdialog', { name: '删除例行规则？' })
+    expect(confirmation.textContent).toContain('已保存的完成记录会保留')
+    fireEvent.click(within(confirmation).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('alertdialog', { name: '删除例行规则？' })).toBeNull()
+    expect(screen.getByRole('button', { name: '删除规则：Alpha' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '删除规则：Alpha' }))
+    const secondConfirmation = await screen.findByRole('alertdialog', { name: '删除例行规则？' })
+    fireEvent.click(within(secondConfirmation).getByRole('button', { name: '删除规则' }))
+    expect(await screen.findByText('已删除规则 · 历史记录')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '删除规则：Alpha' })).toBeNull()
+  })
+
   it('shows past unrecorded dates as unknown and future dates as noninteractive previews', () => {
     render(<Harness />)
     expect(screen.getByLabelText('无记录：Alpha，10月13日').textContent).toBe('?')
@@ -94,13 +120,16 @@ describe('weekly routine check-in matrix', () => {
     const archivedRecord: RoutineCompletion = {
       id: 'old-check-in', ruleId: 'alpha', ruleTitle: 'Alpha', date: '2026-10-13', completedAt: '2026-10-13T04:30:00.000Z',
     }
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const nativeConfirm = vi.spyOn(window, 'confirm')
     render(<Harness initialCompletions={[archivedRecord]} />)
     expect(screen.getByLabelText('已完成：Alpha，10月13日')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '规则管理' }))
     const manager = screen.getByRole('dialog', { name: '规则管理' })
-    fireEvent.click(within(manager).getByRole('button', { name: '删除规则' }))
+    fireEvent.click(within(manager).getByRole('button', { name: '删除规则：Alpha' }))
+    const confirmation = await screen.findByRole('alertdialog', { name: '删除例行规则？' })
+    fireEvent.click(within(confirmation).getByRole('button', { name: '删除规则' }))
     await waitFor(() => expect(screen.getByText('已删除规则 · 历史记录')).toBeTruthy())
     expect(screen.getByLabelText('已完成：Alpha，10月13日').getAttribute('title')).toContain('规则已删除')
+    expect(nativeConfirm).not.toHaveBeenCalled()
   })
 })
