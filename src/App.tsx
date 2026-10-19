@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpenText, BriefcaseBusiness, CalendarDays, ClipboardList, LayoutDashboard, Settings } from 'lucide-react'
+import { BookOpenText, CalendarDays, ClipboardList, LayoutDashboard, Settings } from 'lucide-react'
 import { CalendarPage } from './components/CalendarPage'
 import { ConfirmDialog, SaveIndicator } from './components/common'
 import { IndexPage } from './components/IndexPage'
@@ -307,13 +307,13 @@ export default function App() {
     }
   }
 
-  if (!ready) return <div className="loading-screen"><div className="loading-mark"><BriefcaseBusiness size={22} /></div><strong>正在打开你的工作空间</strong><span>读取本机保存的数据…</span></div>
+  if (!ready) return <div className="loading-screen"><div className="loading-mark"><img src="/work-todo-icon.png" alt="" /></div><strong>正在打开你的工作空间</strong><span>读取本机保存的数据…</span></div>
 
   return (
     <CountdownClockProvider>
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand-lockup"><div className="brand-mark"><BriefcaseBusiness size={18} /></div><div><strong>WORK SPACE</strong><span>个人工作台</span></div></div>
+        <div className="brand-lockup"><div className="brand-mark"><img src="/work-todo-icon.png" alt="" /></div><div><strong>WORK SPACE</strong><span>个人工作台</span></div></div>
         <nav className="main-nav" aria-label="主导航">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon
