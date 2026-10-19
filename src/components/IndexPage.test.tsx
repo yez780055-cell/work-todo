@@ -167,7 +167,9 @@ describe('Index document directory and focused editor', () => {
   })
 
   it('uses an in-app confirmation dialog and leaves the document intact when canceled', async () => {
-    render(<IndexHarness initialColumns={multiDocumentWorkspace().indexColumns} />)
+    const workspace = createEmptyWorkspace()
+    workspace.indexColumns[0].html = '<p>仍需保留</p>'
+    render(<IndexHarness initialColumns={workspace.indexColumns} />)
     const deleteButton = screen.getByRole('button', { name: '删除文档：主文档' })
     deleteButton.focus()
     fireEvent.click(deleteButton)
@@ -175,9 +177,15 @@ describe('Index document directory and focused editor', () => {
     expect(dialog.textContent).toContain('文档内容也会一并删除。此操作不可撤销。')
     const cancelButton = screen.getByRole('button', { name: '取消' })
     await waitFor(() => expect(document.activeElement).toBe(cancelButton))
+    const confirmButton = screen.getByRole('button', { name: /^删除文档$/ })
+    confirmButton.focus()
+    fireEvent.keyDown(confirmButton, { key: 'Tab' })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '关闭确认框' }))
+    cancelButton.focus()
     fireEvent.keyDown(cancelButton, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: '删除“主文档”？' })).toBeNull())
     expect(screen.getByRole('button', { name: '打开文档：主文档' })).toBeTruthy()
+    expect(screen.getByText('仍需保留')).toBeTruthy()
     await waitFor(() => expect(document.activeElement).toBe(deleteButton))
   })
 
