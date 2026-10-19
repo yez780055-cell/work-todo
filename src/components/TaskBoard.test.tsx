@@ -83,7 +83,7 @@ describe('completed task card details', () => {
   })
 
   it('keeps completed task subtasks visible as read-only', () => {
-    const task = { ...createTask('已完成任务', 'done'), subtasks: [{ id: 's1', title: '步骤', done: false }] }
+    const task = { ...createTask('已完成任务', 'done'), completedAt: new Date('2026-10-14T12:00:00').toISOString(), subtasks: [{ id: 's1', title: '步骤', done: false }] }
     render(<TaskBoard tasks={[task]} now={new Date('2026-10-14T12:00:00')} onOpenTask={() => undefined}
       onCreateTask={() => undefined} onMoveTask={() => undefined} onToggleSubtask={() => undefined} onOpenHistory={() => undefined} />)
 

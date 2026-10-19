@@ -121,6 +121,7 @@ describe('global task shortcuts and quick creation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     fireEvent.click(screen.getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: '打开文档：主文档' }))
     const editor = screen.getByRole('textbox', { name: '主文档内容' })
     fireEvent.keyDown(editor, { key: 'n' })
     expect(screen.queryByRole('dialog', { name: '快速创建任务' })).toBeNull()
@@ -209,11 +210,11 @@ describe('global task shortcuts and quick creation', () => {
     expect(document.querySelector('.column-done .column-count')?.textContent).toBe('1')
   })
 
-  it('synchronizes the legacy primary document mirror after deleting the first Index column', async () => {
+  it('synchronizes the legacy primary document mirror after deleting the first Index document', async () => {
     const workspace = createEmptyWorkspace()
     workspace.indexColumns = [
       { id: 'primary', title: '主文档', html: '<p>原始主文档</p>', updatedAt: null, collapsed: false },
-      { id: 'second', title: '第二列', html: '<p>保留的内容</p>', updatedAt: null, collapsed: false },
+      { id: 'second', title: '第二文档', html: '<p>保留的内容</p>', updatedAt: null, collapsed: false },
     ]
     workspace.indexDocument = { html: workspace.indexColumns[0].html, updatedAt: null }
     loadWorkspaceMock.mockReset().mockResolvedValue(workspace)
@@ -221,8 +222,8 @@ describe('global task shortcuts and quick creation', () => {
     render(<App />)
     await screen.findByRole('button', { name: '已完成历史' })
     fireEvent.click(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('button', { name: /Index/ }))
-    fireEvent.click(screen.getByRole('button', { name: '删除列：主文档' }))
-    fireEvent.click(screen.getByRole('button', { name: /^删除列$/ }))
+    fireEvent.click(screen.getByRole('button', { name: '删除文档：主文档' }))
+    fireEvent.click(screen.getByRole('button', { name: /^删除文档$/ }))
     await waitFor(() => expect(lastSavedWorkspace().indexDocument.html).toContain('保留的内容'))
     expect(lastSavedWorkspace().indexColumns).toHaveLength(1)
     expect(lastSavedWorkspace().indexDocument.html).toBe(lastSavedWorkspace().indexColumns[0].html)
@@ -259,7 +260,8 @@ describe('global task search', () => {
     expect(screen.queryByRole('dialog', { name: '全局任务搜索' })).toBeNull()
 
     fireEvent.click(mainNavigation.getByRole('button', { name: /Index/ }))
-    const editor = screen.getByRole('textbox', { name: '主文档内容' })
+    fireEvent.click(screen.getByRole('button', { name: '打开文档：主文档' }))
+    const editor = await screen.findByRole('textbox', { name: '主文档内容' })
     fireEvent.keyDown(editor, { key: 'k', ctrlKey: true })
     expect(screen.queryByRole('dialog', { name: '全局任务搜索' })).toBeNull()
   })
