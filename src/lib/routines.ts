@@ -1,7 +1,7 @@
-import { routineRunsOnDate } from './dates'
+import { routineRunsOnDate, toDateKey } from './dates'
 import { createId, type CalendarDayType, type RoutineCompletion, type RoutineRule } from './model'
 
-export type RoutineMatrixCellState = 'complete' | 'actionable' | 'preview' | 'unknown' | 'unavailable'
+export type RoutineMatrixCellState = 'complete' | 'actionable' | 'preview' | 'missed' | 'unavailable'
 
 export function updateRoutineCompletion(
   completions: RoutineCompletion[],
@@ -25,8 +25,12 @@ export function getRoutineMatrixCellState(
   completed: boolean,
 ): RoutineMatrixCellState {
   if (completed) return 'complete'
-  if (date < today) return 'unknown'
   if (!rule) return 'unavailable'
+  if (date < today) {
+    const createdDate = toDateKey(new Date(rule.createdAt))
+    if (!rule.enabled || date < createdDate || !routineRunsOnDate(rule, date, overrides)) return 'unavailable'
+    return 'missed'
+  }
 
   const applies = rule.enabled && routineRunsOnDate(rule, date, overrides)
   if (!applies) return 'unavailable'

@@ -28,7 +28,7 @@ export function RoutinePage({
   completions: RoutineCompletion[]
   dateKey: string
   calendarOverrides: Record<string, CalendarDayType>
-  onToggleCompletion: (rule: RoutineRule, done: boolean) => void
+  onToggleCompletion: (rule: RoutineRule, date: string, done: boolean) => void
   onSaveRule: (rule: RoutineRule) => void
   onDeleteRule: (rule: RoutineRule) => void
   onToggleRule: (rule: RoutineRule) => void
@@ -97,7 +97,7 @@ export function RoutinePage({
   return (
     <div className="routine-page">
       <div className="routine-intro">
-        <div><h2>例行任务</h2><p>每周打卡记录；未记录的历史日期保持未知。</p></div>
+        <div><h2>例行任务</h2><p>按规则记录每周完成情况，可补记适用的历史日期。</p></div>
         <div className="today-date"><CalendarDays size={16} /><span>{todayLabel}</span></div>
       </div>
       <section className="routine-week-panel" aria-label="例行任务每周打卡矩阵">
@@ -114,7 +114,7 @@ export function RoutinePage({
           </div>
         </header>
         <div className="routine-matrix-legend" aria-label="打卡状态说明">
-          <span><Check size={14} />已完成</span><span><Circle size={13} />今天可打卡</span><span><b>?</b>过去无记录</span><span><b>—</b>不适用</span><span>点击今天的勾号可撤销</span>
+          <span><Check size={14} />已完成</span><span><Circle size={13} />今天可打卡</span><span className="routine-missed-legend"><b>!</b>漏打卡，可补打</span><span><b>—</b>不适用</span><span>历史完成可撤销</span>
         </div>
         <div className="routine-matrix-scroll" role="region" aria-label="每周例行任务矩阵，可横向滚动" tabIndex={0}>
           <table className="routine-week-matrix">
@@ -140,23 +140,25 @@ export function RoutinePage({
                     const cellDateLabel = `${date.getMonth() + 1}月${date.getDate()}日`
                     return <td key={key} className={`${key === dateKey ? 'routine-matrix-today-cell ' : ''}routine-cell-${state}`}>
                       {state === 'complete' && key === dateKey && row.rule
-                        ? <button type="button" className="routine-matrix-mark routine-matrix-complete" aria-label={`撤销打卡：${row.title}，${cellDateLabel}`} title="点击撤销今日打卡" onClick={() => onToggleCompletion(row.rule!, false)}><Check size={16} /></button>
+                        ? <button type="button" className="routine-matrix-mark routine-matrix-complete" aria-label={`撤销打卡：${row.title}，${cellDateLabel}`} title="点击撤销今日打卡" onClick={() => onToggleCompletion(row.rule!, key, false)}><Check size={16} /></button>
                         : state === 'complete'
-                          ? <span className="routine-matrix-mark routine-matrix-complete" aria-label={`已完成：${row.title}，${cellDateLabel}`} title={`${completion?.completedAt ? `完成于 ${new Date(completion.completedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '已完成'}${row.archived ? ' · 规则已删除' : ''}`}><Check size={16} /></span>
+                          ? row.rule
+                            ? <button type="button" className="routine-matrix-mark routine-matrix-complete" aria-label={`撤销历史打卡：${row.title}，${cellDateLabel}`} title="点击撤销历史打卡" onClick={() => onToggleCompletion(row.rule!, key, false)}><Check size={16} /></button>
+                            : <span className="routine-matrix-mark routine-matrix-complete" aria-label={`已完成：${row.title}，${cellDateLabel}`} title={`${completion?.completedAt ? `完成于 ${new Date(completion.completedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '已完成'} · 规则已删除`}><Check size={16} /></span>
                           : state === 'actionable'
-                            ? <button type="button" className="routine-matrix-mark routine-matrix-actionable" aria-label={`标记完成：${row.title}，${cellDateLabel}`} title="点击完成今天的例行任务" onClick={() => onToggleCompletion(row.rule!, true)}><Circle size={16} /></button>
+                            ? <button type="button" className="routine-matrix-mark routine-matrix-actionable" aria-label={`标记完成：${row.title}，${cellDateLabel}`} title="点击完成今天的例行任务" onClick={() => onToggleCompletion(row.rule!, key, true)}><Circle size={16} /></button>
                             : state === 'preview'
                               ? <span className="routine-matrix-mark routine-matrix-preview" aria-label={`未来预览：${row.title}，${cellDateLabel}`} title="未来日期，仅预览"><Circle size={14} /></span>
-                              : state === 'unknown'
-                                ? <span className="routine-matrix-unknown" aria-label={`无记录：${row.title}，${cellDateLabel}`} title="无记录（未知；不推断为未完成）">?</span>
-                                : <span className="routine-matrix-unavailable" aria-label={`不适用：${row.title}，${cellDateLabel}`} title="此日期不适用或规则已停用">—</span>}
+                              : state === 'missed' && row.rule
+                                ? <button type="button" className="routine-matrix-mark routine-matrix-missed" aria-label={`漏打卡：${row.title}，${cellDateLabel}；点击补打卡`} title={`漏打卡：${row.title}，${cellDateLabel}；点击补打卡`} onClick={() => onToggleCompletion(row.rule!, key, true)}>!</button>
+                                : <span className="routine-matrix-unavailable" aria-label={`不适用或不可判断：${row.title}，${cellDateLabel}`} title="此日期不适用，或规则已删除而无法判断">—</span>}
                     </td>
                   })}
                 </tr>)}
             </tbody>
           </table>
         </div>
-        <footer className="routine-matrix-footer"><span><ListChecks size={15} />历史日期仅显示已保存记录；未知日期不会推测为漏打卡。</span><span>记录仅在今天产生，可撤销；未来日期不可打卡。</span></footer>
+        <footer className="routine-matrix-footer"><span><ListChecks size={15} />启用规则适用但未完成的历史日期可补打卡；已删除规则的空白历史不推断。</span><span>未来日期仅预览；已有规则的历史记录可撤销。</span></footer>
       </section>
       {managerOpen && <RoutineManager
         rules={rules}
@@ -190,7 +192,7 @@ function RoutineManager({ rules, onClose, onAdd, onEdit, onDelete, onToggle }: {
       <div className="manager-list">
         {ordered.length === 0 ? <EmptyState icon={<Settings2 size={22} />} title="还没有规则" detail="添加一条你想每天或每周重复的工作事项。" /> : ordered.map((rule) => (
           <article className={`manager-rule ${rule.enabled ? '' : 'manager-rule-disabled'}`} key={rule.id}>
-            <div className="manager-rule-info"><span className="manager-rule-icon"><Check size={15} /></span><div><strong>{rule.title}</strong><span>{RECURRENCE_LABELS[rule.recurrence]}{rule.recurrence === 'weekly' ? ` · ${rule.weekdays.map((day) => WEEKDAY_LABELS[day]).join('、')}` : ''}</span></div></div>
+            <div className="manager-rule-info"><span className="manager-rule-icon"><Check size={15} /></span><div><strong>{rule.title}</strong><span>{RECURRENCE_LABELS[rule.recurrence]}{rule.recurrence === 'weekly' ? ` · ${rule.weekdays.map((day) => WEEKDAY_LABELS[day]).join('、')}` : ''}{rule.reminderTime ? ` · 提醒 ${rule.reminderTime}` : ''}</span></div></div>
             <div className="manager-rule-actions"><button type="button" onClick={() => onToggle(rule)} className={`switch ${rule.enabled ? 'switch-on' : ''}`} role="switch" aria-checked={rule.enabled} aria-label={rule.enabled ? '暂停规则' : '启用规则'}><span /></button><button type="button" className="text-action" onClick={() => onEdit(rule)}>编辑</button><button type="button" className="delete-subtask" onClick={() => setPendingDelete(rule)} aria-label={`删除规则：${rule.title}`}><Trash2 size={15} /></button></div>
           </article>
         ))}
@@ -222,6 +224,7 @@ function RoutineRuleEditor({ rule: initial, onClose, onSave }: {
   const save = () => {
     if (!rule.title.trim()) { setError('请填写任务标题。'); return }
     if (rule.recurrence === 'weekly' && rule.weekdays.length === 0) { setError('至少选择一个星期。'); return }
+    if (rule.reminderTime !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.reminderTime)) { setError('提醒时间无效，请使用 24 小时制时间。'); return }
     onSave({ ...rule, title: rule.title.trim() })
   }
   const showOffDayOptions = rule.recurrence !== 'workday'
@@ -232,6 +235,7 @@ function RoutineRuleEditor({ rule: initial, onClose, onSave }: {
         <label className="field-label">重复方式<select value={rule.recurrence} onChange={(event) => update('recurrence', event.target.value as RecurrenceType)}>{Object.entries(RECURRENCE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {rule.recurrence === 'weekly' && <fieldset className="weekday-picker"><legend>选择星期</legend><div>{WEEKDAY_LABELS.map((label, index) => <button type="button" className={rule.weekdays.includes(index) ? 'weekday-selected' : ''} key={label} onClick={() => toggleWeekday(index)} aria-pressed={rule.weekdays.includes(index)}>{label}</button>)}</div></fieldset>}
         {showOffDayOptions ? <fieldset className="offday-options"><legend>遇到非工作日时</legend><label><input type="checkbox" checked={rule.runOnRestDays} onChange={(event) => update('runOnRestDays', event.target.checked)} /><span><strong>休息日执行</strong><small>未勾选则当天跳过，不顺延</small></span></label><label><input type="checkbox" checked={rule.runOnHolidays} onChange={(event) => update('runOnHolidays', event.target.checked)} /><span><strong>节假日执行</strong><small>未勾选则当天跳过，不顺延</small></span></label></fieldset> : <div className="workday-rule-note"><CalendarDays size={16} /> 只在日历标记为“工作日”的日期显示</div>}
+        <fieldset className="routine-reminder-options"><legend>提醒</legend><label><input type="checkbox" checked={rule.reminderTime !== null} onChange={(event) => update('reminderTime', event.target.checked ? rule.reminderTime ?? '09:00' : null)} /><span><strong>提醒我</strong></span></label>{rule.reminderTime !== null && <label className="field-label">提醒时间<input type="time" value={rule.reminderTime} onChange={(event) => update('reminderTime', event.target.value || null)} /></label>}<small>到点未完成时发送 Windows 提醒；30 分钟后仍未完成会再次提醒一次。</small></fieldset>
         {error && <div className="form-error">{error}</div>}
       </div>
       <footer className="modal-footer"><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={save}>保存规则</Button></footer>

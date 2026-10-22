@@ -4,7 +4,7 @@ import type { RoutineRule } from './model'
 
 const rule = (overrides: Partial<RoutineRule> = {}): RoutineRule => ({
   id: 'r1', title: '例行', recurrence: 'weekdays', weekdays: [0, 1, 2, 3, 4],
-  runOnRestDays: false, runOnHolidays: true, enabled: true, order: 0,
+  runOnRestDays: false, runOnHolidays: true, enabled: true, reminderTime: null, order: 0,
   createdAt: '', updatedAt: '', ...overrides,
 })
 

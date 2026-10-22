@@ -1,6 +1,6 @@
 import { indexedDB } from 'fake-indexeddb'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createEmptyWorkspace, createTask } from './model'
+import { createEmptyWorkspace, createRoutineRule, createTask } from './model'
 import { loadWorkspace, parseWorkspaceBackup, saveWorkspace } from './storage'
 import { setTaskStatus } from './tasks'
 
@@ -59,7 +59,7 @@ describe('workspace storage and backup compatibility', () => {
     const workspace = createEmptyWorkspace()
     workspace.routineRules.push({
       id: 'routine-live', title: '仍存在的规则', recurrence: 'daily', weekdays: [],
-      runOnRestDays: true, runOnHolidays: true, enabled: true, order: 0,
+      runOnRestDays: true, runOnHolidays: true, enabled: true, reminderTime: null, order: 0,
       createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
     })
     workspace.routineCompletions = [
@@ -79,6 +79,31 @@ describe('workspace storage and backup compatibility', () => {
     expect(restored.routineCompletions).toEqual(workspace.routineCompletions)
     expect(restored.routineRules).toEqual(workspace.routineRules)
     expect(restored.tasks).toEqual(workspace.tasks)
+  })
+
+  it('migrates legacy routine rules without reminderTime and accepts legacy backups', async () => {
+    const workspace = createEmptyWorkspace()
+    const legacyRule = {
+      id: 'legacy-reminder', title: '旧规则', recurrence: 'daily', weekdays: [],
+      runOnRestDays: true, runOnHolidays: true, enabled: true, order: 0,
+      createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
+    }
+    const legacy = { ...workspace, routineRules: [legacyRule] }
+    await putStoredWorkspace(legacy)
+
+    const loaded = await loadWorkspace()
+    expect(loaded.routineRules[0].reminderTime).toBeNull()
+    expect((await getStoredWorkspace() as typeof loaded).routineRules[0].reminderTime).toBeNull()
+    expect(parseWorkspaceBackup(legacy).routineRules[0].reminderTime).toBeNull()
+    expect(loaded.tasks).toEqual(workspace.tasks)
+    expect(loaded.indexColumns).toEqual(workspace.indexColumns)
+  })
+
+  it('round trips a configured reminder time and rejects invalid reminder times', () => {
+    const workspace = createEmptyWorkspace()
+    workspace.routineRules.push({ ...createRoutineRule(), title: '带提醒的规则', reminderTime: '09:35' })
+    expect(parseWorkspaceBackup(JSON.parse(JSON.stringify(workspace))).routineRules[0].reminderTime).toBe('09:35')
+    expect(() => parseWorkspaceBackup({ ...workspace, routineRules: [{ ...workspace.routineRules[0], reminderTime: '24:00' }] })).toThrow('该备份版本无法导入')
   })
 
   it('accepts the existing version 1 backup envelope and legacy raw workspace', () => {
@@ -177,7 +202,7 @@ describe('workspace storage and backup compatibility', () => {
     workspace.tasks.push(createTask('保留的任务'))
     workspace.routineRules.push({
       id: 'routine-1', title: '保留的例行规则', recurrence: 'daily', weekdays: [0, 1, 2, 3, 4],
-      runOnRestDays: true, runOnHolidays: true, enabled: true, order: 0,
+      runOnRestDays: true, runOnHolidays: true, enabled: true, reminderTime: null, order: 0,
       createdAt: '2026-10-16T00:00:00.000Z', updatedAt: '2026-10-16T00:00:00.000Z',
     })
     workspace.calendarOverrides['2026-10-20'] = 'holiday'
@@ -219,7 +244,7 @@ describe('workspace storage and backup compatibility', () => {
       workspace.tasks.push(task)
     }],
     ['duplicate routine rule IDs', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
-      const rule = { id: 'same-rule', title: '规则', recurrence: 'daily' as const, weekdays: [], runOnRestDays: true, runOnHolidays: true, enabled: true, order: 0, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' }
+      const rule = { id: 'same-rule', title: '规则', recurrence: 'daily' as const, weekdays: [], runOnRestDays: true, runOnHolidays: true, enabled: true, reminderTime: null, order: 0, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' }
       workspace.routineRules.push(rule, { ...rule })
     }],
     ['duplicate routine completion IDs', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
@@ -258,7 +283,7 @@ describe('workspace storage and backup compatibility', () => {
       workspace.tasks.push(task)
     }],
     ['non-finite routine ordering value', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
-      workspace.routineRules.push({ id: 'rule', title: '规则', recurrence: 'daily', weekdays: [0], runOnRestDays: true, runOnHolidays: true, enabled: true, order: Number.POSITIVE_INFINITY, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' })
+      workspace.routineRules.push({ id: 'rule', title: '规则', recurrence: 'daily', weekdays: [0], runOnRestDays: true, runOnHolidays: true, enabled: true, reminderTime: null, order: Number.POSITIVE_INFINITY, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' })
     }],
     ['invalid calendar date key', (workspace: ReturnType<typeof createEmptyWorkspace>) => {
       workspace.calendarOverrides['2026-02-30'] = 'rest'

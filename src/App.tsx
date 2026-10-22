@@ -19,6 +19,8 @@ import { parseWorkspaceBackup } from './lib/storage'
 import { sanitizeImportedIndexWorkspace, updateIndexWorkspace } from './lib/indexWorkspace'
 import { setSubtaskCompletion, setTaskStatus } from './lib/tasks'
 import { updateRoutineCompletion } from './lib/routines'
+import { RoutineReminderScheduler, type RoutineReminderAlert } from './lib/routineReminder'
+import { sendWindowsRoutineNotification } from './lib/desktopNotifications'
 import { useWorkspace } from './useWorkspace'
 import { useShortcutSettings } from './useShortcutSettings'
 import { CountdownClockProvider } from './useCountdownClock'
@@ -51,6 +53,7 @@ export default function App() {
   const [pendingBackupImport, setPendingBackupImport] = useState<{ workspace: WorkspaceData; storageName: string } | null>(null)
   const [resetVersion, setResetVersion] = useState(0)
   const [shortcutRuntimeError, setShortcutRuntimeError] = useState('')
+  const [urgentRoutineReminders, setUrgentRoutineReminders] = useState<RoutineReminderAlert[]>([])
   const isComposing = useRef(false)
   const shortcutSettingsRef = useRef(shortcutSettings.settings)
   const openDialogsRef = useRef(false)
@@ -58,12 +61,43 @@ export default function App() {
   openDialogsRef.current = drawerOpen || historyOpen || quickCreateOpen || taskSearchOpen || Boolean(pendingTaskDelete || pendingBackupImport)
   const flushWorkspaceRef = useRef(flushWorkspace)
   flushWorkspaceRef.current = flushWorkspace
+  const workspaceRef = useRef(data)
+  workspaceRef.current = data
+  const routineReminderSchedulerRef = useRef<RoutineReminderScheduler | null>(null)
+  if (!routineReminderSchedulerRef.current) {
+    const safeStorage = {
+      getItem: (key: string) => { try { return window.localStorage.getItem(key) } catch { return null } },
+      setItem: (key: string, value: string) => { try { window.localStorage.setItem(key, value) } catch { /* Reminders remain best-effort if browser storage is unavailable. */ } },
+    }
+    routineReminderSchedulerRef.current = new RoutineReminderScheduler(safeStorage, sendWindowsRoutineNotification)
+  }
   const activeTask = data.tasks.find((task) => task.id === activeTaskId) ?? null
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (!ready || !isWindowsDesktop) return
+    let active = true
+    const check = () => {
+      void routineReminderSchedulerRef.current?.check(workspaceRef.current, new Date()).then((alerts) => {
+        if (active) setUrgentRoutineReminders(alerts)
+      })
+    }
+    const handleResume = () => check()
+    check()
+    const timer = window.setInterval(check, 30_000)
+    window.addEventListener('focus', handleResume)
+    document.addEventListener('visibilitychange', handleResume)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      window.removeEventListener('focus', handleResume)
+      document.removeEventListener('visibilitychange', handleResume)
+    }
+  }, [ready, isWindowsDesktop, data])
 
   useEffect(() => {
     const handleGlobalShortcut = (event: Event) => {
@@ -220,10 +254,10 @@ export default function App() {
     setPendingTaskDelete(null)
   }
 
-  const toggleRoutine = (rule: RoutineRule, done: boolean) => {
+  const toggleRoutine = (rule: RoutineRule, date: string, done: boolean) => {
     setData((current) => ({
       ...current,
-      routineCompletions: updateRoutineCompletion(current.routineCompletions, rule, localDateKey, done),
+      routineCompletions: updateRoutineCompletion(current.routineCompletions, rule, date, done),
     }))
   }
 
@@ -331,6 +365,7 @@ export default function App() {
         </header>
         {saveState.status === 'error' && <div className="global-storage-error">本机保存异常：{saveState.message}<button onClick={() => setActivePage('settings')}>打开备份设置</button></div>}
         {shortcutRuntimeError && <div className="shortcut-runtime-error" role="alert">快捷键唤起提示：{shortcutRuntimeError}<button aria-label="关闭快捷键提示" onClick={() => setShortcutRuntimeError('')}>关闭</button></div>}
+        {urgentRoutineReminders.length > 0 && <div className="routine-urgent-reminder" role="alert"><strong>例行任务仍未完成</strong><span>{urgentRoutineReminders.map((item) => `${item.title || '未命名例行任务'} 已提醒 30 分钟仍未完成`).join('；')}</span><button type="button" onClick={() => setActivePage('routines')}>查看例行任务</button></div>}
         <div className={`page-content page-${activePage}`}>
           {activePage === 'tasks' && <TaskBoard tasks={data.tasks} now={now} onOpenTask={openExistingTask} onCreateTask={openNewTask} onMoveTask={updateTaskStatus} onToggleSubtask={toggleSubtask} onOpenHistory={() => setHistoryOpen(true)} onOpenSearch={() => setTaskSearchOpen(true)} />}
           {activePage === 'routines' && <RoutinePage rules={data.routineRules} completions={data.routineCompletions} dateKey={localDateKey} calendarOverrides={data.calendarOverrides} onToggleCompletion={toggleRoutine} onSaveRule={saveRoutineRule} onDeleteRule={deleteRoutineRule} onToggleRule={toggleRoutineRule} />}

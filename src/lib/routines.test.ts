@@ -4,7 +4,7 @@ import { getRoutineMatrixCellState, updateRoutineCompletion } from './routines'
 
 const dailyRule: RoutineRule = {
   id: 'daily-1', title: '每日检查', recurrence: 'daily', weekdays: [],
-  runOnRestDays: true, runOnHolidays: true, enabled: true, order: 0,
+  runOnRestDays: true, runOnHolidays: true, enabled: true, reminderTime: null, order: 0,
   createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
 }
 
@@ -28,14 +28,14 @@ describe('weekly routine matrix state and completion records', () => {
     expect(getRoutineMatrixCellState(workCalendar, '2026-10-14', '2026-10-14', {}, false)).toBe('actionable')
   })
 
-  it('keeps unrecorded history unknown and future dates preview-only', () => {
-    expect(getRoutineMatrixCellState(dailyRule, '2026-10-13', '2026-10-14', {}, false)).toBe('unknown')
+  it('marks applicable history as missed and keeps future dates preview-only', () => {
+    expect(getRoutineMatrixCellState(dailyRule, '2026-10-13', '2026-10-14', {}, false)).toBe('missed')
     expect(getRoutineMatrixCellState(dailyRule, '2026-10-15', '2026-10-14', {}, false)).toBe('preview')
     expect(getRoutineMatrixCellState(dailyRule, '2026-10-13', '2026-10-14', {}, true)).toBe('complete')
-    expect(getRoutineMatrixCellState(null, '2026-10-13', '2026-10-14', {}, false)).toBe('unknown')
+    expect(getRoutineMatrixCellState(null, '2026-10-13', '2026-10-14', {}, false)).toBe('unavailable')
   })
 
-  it('does not recalculate missing historical check-ins from current recurrence, enabled state, or calendar overrides', () => {
+  it('does not mark disabled, non-applicable, or pre-creation history as missed', () => {
     const changedRule: RoutineRule = {
       ...dailyRule,
       recurrence: 'weekly',
@@ -44,9 +44,10 @@ describe('weekly routine matrix state and completion records', () => {
       runOnRestDays: false,
       runOnHolidays: false,
     }
-    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', { '2026-10-13': 'holiday' }, false)).toBe('unknown')
-    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', { '2026-10-13': 'rest' }, false)).toBe('unknown')
-    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', {}, false)).toBe('unknown')
+    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', { '2026-10-13': 'holiday' }, false)).toBe('unavailable')
+    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', { '2026-10-13': 'rest' }, false)).toBe('unavailable')
+    expect(getRoutineMatrixCellState(changedRule, '2026-10-13', '2026-10-14', {}, false)).toBe('unavailable')
+    expect(getRoutineMatrixCellState({ ...dailyRule, createdAt: '2026-10-14T00:00:00.000Z' }, '2026-10-13', '2026-10-14', {}, false)).toBe('unavailable')
     expect(getRoutineMatrixCellState(null, '2026-10-13', '2026-10-14', {}, true)).toBe('complete')
   })
 

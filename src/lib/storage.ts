@@ -133,7 +133,8 @@ function validateAndNormalizeWorkspace(value: unknown): { workspace: WorkspaceDa
   }
 
   let columns: IndexColumn[]
-  let migrated = false
+  let migrated = data.routineRules.some((rule) => rule.reminderTime === undefined)
+  const routineRules = data.routineRules.map((rule) => ({ ...rule, reminderTime: rule.reminderTime ?? null }))
   if (!Object.prototype.hasOwnProperty.call(value, 'indexColumns')) {
     columns = [{ id: 'index-main', title: '主文档', html: document.html, updatedAt: document.updatedAt, collapsed: false }]
     migrated = true
@@ -151,6 +152,7 @@ function validateAndNormalizeWorkspace(value: unknown): { workspace: WorkspaceDa
   if (mirrorChanged) throw new Error('Index 首列与兼容文档数据不一致')
   const workspace = {
     ...data,
+    routineRules,
     indexColumns: columns,
   } as WorkspaceData
   return { workspace, migrated }
@@ -190,6 +192,7 @@ function isValidTask(value: unknown): boolean {
 
 function isValidRoutineRule(value: unknown): boolean {
   if (!isRecord(value)) return false
+  const reminderTime = value.reminderTime
   return typeof value.id === 'string' && value.id.length > 0 &&
     typeof value.title === 'string' &&
     typeof value.recurrence === 'string' && RECURRENCE_TYPES.has(value.recurrence) &&
@@ -197,6 +200,7 @@ function isValidRoutineRule(value: unknown): boolean {
     typeof value.runOnRestDays === 'boolean' &&
     typeof value.runOnHolidays === 'boolean' &&
     typeof value.enabled === 'boolean' &&
+    (reminderTime === undefined || reminderTime === null || (typeof reminderTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(reminderTime))) &&
     typeof value.order === 'number' && Number.isFinite(value.order) &&
     isValidTimestamp(value.createdAt) &&
     isValidTimestamp(value.updatedAt)

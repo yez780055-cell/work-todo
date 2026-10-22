@@ -10,7 +10,7 @@ const dateKey = '2026-10-14'
 function makeRule(title: string, order: number, overrides: Partial<RoutineRule> = {}): RoutineRule {
   return {
     id: title.toLowerCase().replaceAll(' ', '-'), title, recurrence: 'daily', weekdays: [],
-    runOnRestDays: true, runOnHolidays: true, enabled: true, order,
+    runOnRestDays: true, runOnHolidays: true, enabled: true, reminderTime: null, order,
     createdAt: `2026-10-01T00:0${order}:00.000Z`, updatedAt: '2026-10-01T00:00:00.000Z',
     ...overrides,
   }
@@ -32,7 +32,7 @@ function Harness({
     completions={completions}
     dateKey={dateKey}
     calendarOverrides={initialOverrides}
-    onToggleCompletion={(rule, done) => setCompletions((current) => updateRoutineCompletion(current, rule, dateKey, done))}
+    onToggleCompletion={(rule, date, done) => setCompletions((current) => updateRoutineCompletion(current, rule, date, done))}
     onSaveRule={(rule) => setRules((current) => current.some((item) => item.id === rule.id) ? current.map((item) => item.id === rule.id ? rule : item) : [...current, rule])}
     onDeleteRule={(rule) => setRules((current) => current.filter((item) => item.id !== rule.id))}
     onToggleRule={(rule) => setRules((current) => current.map((item) => item.id === rule.id ? { ...item, enabled: !item.enabled } : item))}
@@ -85,12 +85,16 @@ describe('weekly routine check-in matrix', () => {
     expect(screen.queryByRole('button', { name: '删除规则：Alpha' })).toBeNull()
   })
 
-  it('shows past unrecorded dates as unknown and future dates as noninteractive previews', () => {
+  it('shows applicable past dates as missed check-ins and future dates as noninteractive previews', () => {
     render(<Harness />)
-    expect(screen.getByLabelText('无记录：Alpha，10月13日').textContent).toBe('?')
+    expect(screen.getByLabelText('漏打卡：Alpha，10月13日；点击补打卡').textContent).toBe('!')
     expect(screen.getByLabelText('未来预览：Alpha，10月15日').tagName).toBe('SPAN')
     expect(screen.getByLabelText('未来预览：Alpha，10月18日').tagName).toBe('SPAN')
-    expect(screen.getByText('历史日期仅显示已保存记录；未知日期不会推测为漏打卡。')).toBeTruthy()
+    expect(screen.getByText('启用规则适用但未完成的历史日期可补打卡；已删除规则的空白历史不推断。')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '漏打卡：Alpha，10月13日；点击补打卡' }))
+    expect(screen.getByRole('button', { name: '撤销历史打卡：Alpha，10月13日' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '撤销历史打卡：Alpha，10月13日' }))
+    expect(screen.getByRole('button', { name: '漏打卡：Alpha，10月13日；点击补打卡' })).toBeTruthy()
   })
 
   it('uses existing repeat rules and calendar overrides for each date cell', () => {
@@ -102,9 +106,22 @@ describe('weekly routine check-in matrix', () => {
     ]
     render(<Harness initialRules={rules} initialOverrides={{ '2026-10-17': 'rest' }} />)
     expect(screen.getByRole('button', { name: '标记完成：Wednesday，10月14日' })).toBeTruthy()
-    expect(screen.getByLabelText('不适用：Weekdays，10月17日')).toBeTruthy()
-    expect(screen.getByLabelText('不适用：Workday，10月17日')).toBeTruthy()
+    expect(screen.getByLabelText('不适用或不可判断：Weekdays，10月17日')).toBeTruthy()
+    expect(screen.getByLabelText('不适用或不可判断：Workday，10月17日')).toBeTruthy()
     expect(screen.getByLabelText('未来预览：Daily Rest，10月17日')).toBeTruthy()
+  })
+
+  it('edits and saves a per-rule reminder time', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: '规则管理' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: '规则管理' })).getByRole('button', { name: '编辑' }))
+    const editor = screen.getByRole('dialog', { name: '编辑例行规则' })
+    fireEvent.click(within(editor).getByRole('checkbox', { name: '提醒我' }))
+    const timeInput = within(editor).getByLabelText('提醒时间') as HTMLInputElement
+    expect(timeInput.value).toBe('09:00')
+    fireEvent.change(timeInput, { target: { value: '08:45' } })
+    fireEvent.click(within(editor).getByRole('button', { name: '保存规则' }))
+    expect(await screen.findByText(/提醒 08:45/)).toBeTruthy()
   })
 
   it('navigates weeks and returns to the local current week', () => {
@@ -122,7 +139,7 @@ describe('weekly routine check-in matrix', () => {
     }
     const nativeConfirm = vi.spyOn(window, 'confirm')
     render(<Harness initialCompletions={[archivedRecord]} />)
-    expect(screen.getByLabelText('已完成：Alpha，10月13日')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '撤销历史打卡：Alpha，10月13日' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '规则管理' }))
     const manager = screen.getByRole('dialog', { name: '规则管理' })
     fireEvent.click(within(manager).getByRole('button', { name: '删除规则：Alpha' }))

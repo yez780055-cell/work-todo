@@ -34,6 +34,7 @@ export interface RoutineRule {
   runOnRestDays: boolean
   runOnHolidays: boolean
   enabled: boolean
+  reminderTime: string | null
   order: number
   createdAt: string
   updatedAt: string
@@ -132,6 +133,7 @@ export function createRoutineRule(order = 0): RoutineRule {
     runOnRestDays: true,
     runOnHolidays: true,
     enabled: true,
+    reminderTime: null,
     order,
     createdAt: now,
     updatedAt: now,

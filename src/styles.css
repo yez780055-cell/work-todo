@@ -490,12 +490,23 @@ button.routine-matrix-mark:focus-visible { outline: 3px solid rgba(65, 98, 188, 
 button.routine-matrix-complete:hover { border-color: #9fc9ad; background: #dff0e5; }
 .routine-matrix-actionable { color: #4968bd; background: #eef2ff; }
 .routine-matrix-actionable:hover { border-color: #aab9e4; background: #e5ebff; }
+.routine-matrix-missed { color: #a83232; border-color: #e7a5a5; background: #fff0f0; font-size: 17px; font-weight: 800; cursor: pointer; }
+.routine-matrix-missed:hover { border-color: #ce7777; background: #ffe3e3; }
+.routine-matrix-missed-legend { color: #a83232; }
+.routine-matrix-missed-legend b { color: #a83232; font-size: 15px; }
 .routine-matrix-preview { color: #aab2bf; background: #f7f8fa; }
 .routine-matrix-unknown, .routine-matrix-unavailable { width: 25px; height: 25px; display: inline-grid; place-items: center; color: #748093; font-size: 13px; }
 .routine-matrix-unavailable { color: #a0a8b4; }
 .routine-matrix-empty { height: 100px !important; color: #566276; font-size: 13px; }
 .routine-matrix-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 9px 15px; border-top: 1px solid #d2d9e3; color: #536075; background: #fbfcfe; font-size: 10px; }
 .routine-matrix-footer span:first-child { display: inline-flex; align-items: center; gap: 5px; }
+.routine-reminder-options { display: grid; gap: 9px; padding: 12px; border: 1px solid #d8dee8; border-radius: 10px; }
+.routine-reminder-options > label:first-of-type { display: flex; align-items: center; gap: 8px; }
+.routine-reminder-options > small { color: #647187; line-height: 1.5; }
+.routine-urgent-reminder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 auto 12px; padding: 11px 14px; border: 1px solid #d98787; border-radius: 10px; color: #7f2525; background: #fff0f0; }
+.routine-urgent-reminder strong { white-space: nowrap; }
+.routine-urgent-reminder span { flex: 1 1 280px; }
+.routine-urgent-reminder button { padding: 6px 10px; border: 1px solid #cd7777; border-radius: 7px; color: #7f2525; background: #fff; cursor: pointer; }
 
 .calendar-type-label { width: auto; min-width: 0; display: inline-flex; align-items: center; justify-content: flex-start; gap: 4px; margin-top: auto; padding: 0; border: 0; border-radius: 0; background: transparent; font-size: 9px; font-weight: 650; line-height: 1.2; }
 .calendar-type-label svg { flex: 0 0 auto; }
